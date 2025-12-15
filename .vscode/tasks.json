@@ -72,6 +72,29 @@
         "kind": "none",
         "isDefault": false
       }
+    },
+    {
+      "label": "Emulators: Run All",
+      "type": "shell",
+      "command": "python3",
+      "args": ["emulators/run_all.py"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      },
+      "runOptions": {
+        "runOn": "default"
+      },
+      "group": {
+        "kind": "none",
+        "isDefault": false
+      }
     }
   ]
 }
