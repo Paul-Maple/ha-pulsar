@@ -1,29 +1,32 @@
 """Entity for Pulsar devices."""
+
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from functools import cached_property
 import logging
 from typing import Any
 
 from homeassistant.core import callback
 from homeassistant.helpers import entity
+from homeassistant.helpers.device_registry import DeviceInfo
 
+from .const import DOMAIN
 from .pulsar_m_water import PulsarM
 from .pulsardevice import PulsarDevice
-
-from .const import (
-    DOMAIN
-)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class BasePulsarEntity(entity.Entity):
+    """Base entity for Pulsar devices."""
 
-    def __init__(self, unique_id: str, pulsar_device: PulsarDevice, **kwargs: Any) -> None:
+    def __init__(
+        self, unique_id: str, pulsar_device: PulsarDevice, **_kwargs: Any
+    ) -> None:
         """Init Pulsar entity."""
-        self._attr_unique_id: str = f"pulsar.{unique_id}"
+        self._attr_unique_id = f"pulsar.{unique_id}"
         self._unique_id = unique_id
         self._name: str = pulsar_device.name
         self._state: Any = None
@@ -38,19 +41,19 @@ class BasePulsarEntity(entity.Entity):
         """Return the Pulsar device this entity is attached to."""
         return self._pulsar_device
 
-    @property
+    @cached_property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return device specific state attributes."""
         return self._extra_state_attributes
 
-    @property
-    def device_info(self) -> entity.DeviceInfo:
+    @cached_property
+    def device_info(self) -> DeviceInfo:
         """Return a device description for device registry."""
-        return entity.DeviceInfo(
+        return DeviceInfo(
             identifiers={(DOMAIN, self._unique_id)},
             manufacturer="Pulsar",
-            model=self._pulsar_device._type,
-            name=self._pulsar_device._name
+            model=self._pulsar_device.type,
+            name=self._pulsar_device.name,
         )
 
     @callback
@@ -77,10 +80,12 @@ class BasePulsarEntity(entity.Entity):
     def log(self, level: int, msg: str, *args, **kwargs):
         """Log a message."""
         msg = f"%s: {msg}"
-        args = (self.entity_id,) + args
-        _LOGGER.log(level, msg, *args, **kwargs)
+        _LOGGER.log(level, msg, self.entity_id, *args, **kwargs)
 
 
 class PulsarMEntity(BasePulsarEntity):
+    """Entity for Pulsar M water meters."""
+
     def __init__(self, unique_id: str, pulsar_device: PulsarM, **kwargs: Any) -> None:
+        """Initialize Pulsar M entity."""
         super().__init__(unique_id, pulsar_device, **kwargs)

@@ -1,33 +1,40 @@
 """Support for Pulsar meters."""
 
-import logging
-from typing import NamedTuple
+from __future__ import annotations
 
-import homeassistant.helpers.entity_registry as er
+from dataclasses import dataclass
+import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
+import homeassistant.helpers.entity_registry as er
 from homeassistant.helpers.typing import ConfigType
-
-from .pulsar_manager import PulsarManager
 
 from .const import (
     CONF_DEVICE_CONFIG,
     DATA_PULSAR,
     DATA_PULSAR_CONFIG,
     DOMAIN,
-    PLATFORMS
+    PLATFORMS,
 )
+from .coordinator import PulsarDataUpdateCoordinator
+from .pulsar_manager import PulsarManager
 
 UNSUB_LISTENER = "unsub_listener"
 
 
-class HomeAssistantPulsarData(NamedTuple):
-    """Pulsar data stored in the Home Assistant data object."""
+@dataclass
+class HomeAssistantPulsarData:
+    """Runtime data for Pulsar integration."""
 
     device_manager: PulsarManager
+    coordinators: dict[str, PulsarDataUpdateCoordinator]
+
+
+type PulsarConfigEntry = ConfigEntry[HomeAssistantPulsarData]
 
 
 # Internal definitions
@@ -45,26 +52,38 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Pulsar."""
-
+async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bool:
+    """Set up Pulsar with connection validation."""
     device_manager = PulsarManager(hass, entry)
 
-    hass.data[DOMAIN][entry.entry_id] = HomeAssistantPulsarData(
-        device_manager=device_manager
-    )
+    # Test connection before proceeding
+    try:
+        await hass.async_add_executor_job(device_manager.test_connection)
+    except Exception as err:
+        raise ConfigEntryNotReady(f"Unable to connect to serial device: {err}") from err
 
+    # Create coordinator for each device
+    coordinators: dict[str, PulsarDataUpdateCoordinator] = {}
     devices = device_manager.get_devices(None)
 
+    for device_id, device in devices.items():
+        coordinator = PulsarDataUpdateCoordinator(hass, device, device_id)
+        await coordinator.async_config_entry_first_refresh()
+        coordinators[device_id] = coordinator
+
+    entry.runtime_data = HomeAssistantPulsarData(
+        device_manager=device_manager, coordinators=coordinators
+    )
+
+    # Register devices in device registry
     device_registry = dr.async_get(hass)
-    for device_id in devices:
-        device = devices[device_id]
+    for device_id, device in devices.items():
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, device_id)},
             manufacturer="Pulsar",
             name=device.name,
-            model=device._type
+            model=device.type,
         )
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
@@ -80,10 +99,10 @@ async def async_update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
 
 
 async def async_remove_config_entry_device(
-    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+    hass: HomeAssistant, config_entry: PulsarConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     """Remove a config entry from a device."""
-    dev_id = list(device_entry.identifiers)[0][1]
+    dev_id = next(iter(device_entry.identifiers))[1]
     ent_reg = er.async_get(hass)
     entities = {
         ent.unique_id: ent.entity_id
@@ -112,12 +131,18 @@ async def async_remove_config_entry_device(
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        # Clean up coordinators
+        if entry.runtime_data:
+            for coordinator in entry.runtime_data.coordinators.values():
+                await coordinator.async_shutdown()
 
-        if not hass.config_entries.async_entries(DOMAIN):
-            hass.data.pop(DOMAIN)
+        # Clean up legacy hass.data if it exists
+        if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+            hass.data[DOMAIN].pop(entry.entry_id)
+            if not hass.config_entries.async_entries(DOMAIN):
+                hass.data.pop(DOMAIN)
 
     return unload_ok

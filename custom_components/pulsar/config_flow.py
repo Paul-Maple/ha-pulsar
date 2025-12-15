@@ -1,23 +1,22 @@
 """Config flow for Pulsar."""
+
 from __future__ import annotations
 
 import logging
 import uuid
-import datetime
 from typing import Any
 
 import serial.tools.list_ports
 import voluptuous as vol
 
-import homeassistant.helpers.config_validation as cv
-
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowHandler, FlowResult
+from homeassistant.util import dt as dt_util
+import homeassistant.helpers.config_validation as cv
 
 from .connector import Connector
-
 from .const import (
     CONF_DEVICE_CONFIG,
     CONF_DEVICE_OR_ADDRESS,
@@ -34,8 +33,9 @@ from .const import (
     STEP_CONFIGURE_MENU,
     STEP_EDIT_DEVICE,
     STEP_MANUAL_PORT_CONFIG,
-    PulsarType
+    PulsarType,
 )
+from .exceptions import PulsarConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ DEVICE_CONFIG_SCHEMA_ENTRY = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_SERIAL_ID): cv.positive_int,
-        vol.Required(CONF_TYPE): vol.In([e.value for e in PulsarType])
+        vol.Required(CONF_TYPE): vol.In([e.value for e in PulsarType]),
     }
 )
 
@@ -71,6 +71,7 @@ def schema_defaults(schema, dps_list=None, **defaults):
 
 
 class BaseFlow(FlowHandler):
+    """Base flow handler for Pulsar config flow."""
 
     def __init__(self, config_entry: ConfigEntry | None = None) -> None:
         """Initialize flow instance."""
@@ -78,42 +79,57 @@ class BaseFlow(FlowHandler):
         self._config_entry = config_entry
         self._device_or_address: str | None = None
         self._device_data: dict[str, dict[str, Any]] = {}
+        self._title: str | None = None
         self.selected_device = None
         self.editing_device = False
 
+    def _test_connection(self, device_or_address: str) -> bool:
+        """Test connection to device (blocking - call from executor).
+
+        Args:
+            device_or_address: Serial device path or IP address.
+
+        Returns:
+            True if connection successful.
+
+        Raises:
+            PulsarConnectionError: If connection fails.
+
+        """
+        connector = Connector(device_or_address, "test_connector")
+        try:
+            return connector.test_connection()
+        finally:
+            connector.disconnect()
+
     async def _async_create_or_update_entry(self) -> FlowResult:
         """Create a config entry with the current flow state."""
-        assert self._title is not None
-        assert self._device_or_address is not None
-        assert len(self._device_data) > 0
+        if self._title is None:
+            raise ValueError("Title is not set")
+        if self._device_or_address is None:
+            raise ValueError("Device or address is not set")
+        if len(self._device_data) == 0:
+            raise ValueError("No device data configured")
 
         data = {
             CONF_DEVICE_OR_ADDRESS: self._device_or_address,
-            CONF_DEVICE_CONFIG: self._device_data
+            CONF_DEVICE_CONFIG: self._device_data,
         }
 
         if self._config_entry is not None:
-
             # Just for trigger async_update_listener
             options = {
                 **self._config_entry.options,
-                "CONF_UPD_DATE": datetime.datetime.now(),
+                "CONF_UPD_DATE": dt_util.utcnow().isoformat(),
             }
 
             self.hass.config_entries.async_update_entry(
-                self._config_entry,
-                data=data,
-                options=options)
+                self._config_entry, data=data, options=options
+            )
 
-            return self.async_create_entry(
-                title="",
-                data={}
-            )
-        else:
-            return self.async_create_entry(
-                title="Pulsar",
-                data=data
-            )
+            return self.async_create_entry(title="", data={})
+
+        return self.async_create_entry(title="Pulsar", data=data)
 
     async def async_step_choose_serial_port(
         self, user_input: dict[str, Any] | None = None
@@ -161,10 +177,7 @@ class BaseFlow(FlowHandler):
             }
         )
 
-        return self.async_show_form(
-            step_id=STEP_CHOOSE_SERIAL_PORT,
-            data_schema=schema
-        )
+        return self.async_show_form(step_id=STEP_CHOOSE_SERIAL_PORT, data_schema=schema)
 
     async def async_step_manual_port_config(
         self, user_input: dict[str, Any] | None = None
@@ -177,24 +190,22 @@ class BaseFlow(FlowHandler):
             self._title = device_or_address
             self._device_or_address = device_or_address
 
-            if Connector(device_or_address, "connector"):
+            # Test connection in executor to avoid blocking
+            try:
+                await self.hass.async_add_executor_job(
+                    self._test_connection, device_or_address
+                )
+            except PulsarConnectionError:
+                errors["base"] = "cannot_connect"
+            else:
                 if len(self._device_data) > 0:
                     return await self.async_step_add_menu()
-                else:
-                    return await self.async_step_configure_device()
-
-            errors["base"] = "cannot_connect"
+                return await self.async_step_configure_device()
 
         if user_input is None:
             user_input = {}
 
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_DEVICE_OR_ADDRESS, vol.UNDEFINED
-                ): str
-            }
-        )
+        schema = vol.Schema({vol.Required(CONF_DEVICE_OR_ADDRESS): str})
 
         return self.async_show_form(
             step_id=STEP_MANUAL_PORT_CONFIG,
@@ -212,37 +223,37 @@ class BaseFlow(FlowHandler):
         edit_dev_conf_id: str | None = None
 
         if user_input is not None:
-
             device_conf = {
                 CONF_NAME: user_input[CONF_NAME],
                 CONF_SERIAL_ID: user_input[CONF_SERIAL_ID],
-                CONF_TYPE: user_input[CONF_TYPE]
+                CONF_TYPE: user_input[CONF_TYPE],
             }
 
             if self.editing_device:
-
                 for dev_conf_id in self._device_data:
                     dev_conf = self._device_data[dev_conf_id]
                     if dev_conf[CONF_NAME] == dev_name:
                         edit_dev_conf_id = dev_conf_id
 
+                if edit_dev_conf_id is None:
+                    return self.async_abort(reason="device_not_found")
+
                 prev_dev_data = self._device_data[edit_dev_conf_id]
 
                 for dev_conf_id in self._device_data:
-
                     dev_conf = self._device_data[dev_conf_id]
 
-                    if prev_dev_data[CONF_SERIAL_ID] != dev_conf[CONF_SERIAL_ID] \
-                            and dev_conf[CONF_SERIAL_ID] == device_conf[CONF_SERIAL_ID]:
-                        return self.async_abort(
-                            reason="address_already_configured"
-                        )
+                    if (
+                        prev_dev_data[CONF_SERIAL_ID] != dev_conf[CONF_SERIAL_ID]
+                        and dev_conf[CONF_SERIAL_ID] == device_conf[CONF_SERIAL_ID]
+                    ):
+                        return self.async_abort(reason="address_already_configured")
 
-                    if prev_dev_data[CONF_NAME] != dev_conf[CONF_NAME] \
-                            and dev_conf[CONF_NAME] == device_conf[CONF_NAME]:
-                        return self.async_abort(
-                            reason="name_already_exists"
-                        )
+                    if (
+                        prev_dev_data[CONF_NAME] != dev_conf[CONF_NAME]
+                        and dev_conf[CONF_NAME] == device_conf[CONF_NAME]
+                    ):
+                        return self.async_abort(reason="name_already_exists")
 
                 self._device_data[edit_dev_conf_id] = device_conf
 
@@ -250,20 +261,14 @@ class BaseFlow(FlowHandler):
                 self.selected_device = None
 
             else:
-
                 for dev_conf_id in self._device_data:
-
                     dev_conf = self._device_data[dev_conf_id]
 
                     if dev_conf[CONF_SERIAL_ID] == device_conf[CONF_SERIAL_ID]:
-                        return self.async_abort(
-                            reason="address_already_configured"
-                        )
+                        return self.async_abort(reason="address_already_configured")
 
                     if dev_conf[CONF_NAME] == device_conf[CONF_NAME]:
-                        return self.async_abort(
-                            reason="name_already_exists"
-                        )
+                        return self.async_abort(reason="name_already_exists")
 
                 new_dev_conf_id = uuid.uuid4().hex
                 self._device_data[new_dev_conf_id] = device_conf
@@ -289,7 +294,7 @@ class BaseFlow(FlowHandler):
                     edit_dev_conf_id = dev_conf_id
 
             # If selected device exists as a config entry, load config from it
-            if (edit_dev_conf_id is not None):
+            if edit_dev_conf_id is not None:
                 defaults = self._device_data[edit_dev_conf_id].copy()
             else:
                 defaults = base_defaults
@@ -304,32 +309,31 @@ class BaseFlow(FlowHandler):
             step_id=STEP_CONFIGURE_DEVICE,
             data_schema=schema,
             errors=errors,
-            description_placeholders=placeholders
+            description_placeholders=placeholders,
         )
 
     async def async_step_complete(
-        self, user_input: dict[str, Any] | None = None
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Complete"""
+        """Complete the configuration flow."""
 
         return await self._async_create_or_update_entry()
 
     async def async_step_add_menu(
-        self, user_input: dict[str, Any] | None = None
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Add device."""
         options = [STEP_CONFIGURE_DEVICE, STEP_COMPLETE]
 
-        return self.async_show_menu(
-            step_id=STEP_ADD_MENU,
-            menu_options=options
-        )
+        return self.async_show_menu(step_id=STEP_ADD_MENU, menu_options=options)
 
 
-class ConfigFlow(BaseFlow, config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(BaseFlow, config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[misc]
     """Handle a config flow for Pulsar."""
 
     VERSION = 1
+
+    # is_matching is not required for this integration
 
     @staticmethod
     @callback
@@ -341,12 +345,12 @@ class ConfigFlow(BaseFlow, config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         super().__init__()
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
+    async def async_step_user(self, user_input=None) -> FlowResult:  # type: ignore[override]
         """Handle the initial step."""
         return await self.async_step_choose_serial_port()
 
 
-class OptionsFlowHandler(BaseFlow, config_entries.OptionsFlow):
+class OptionsFlowHandler(BaseFlow, config_entries.OptionsFlow):  # type: ignore[misc]
     """Handle a option flow for Pulsar."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
@@ -361,24 +365,22 @@ class OptionsFlowHandler(BaseFlow, config_entries.OptionsFlow):
         self.editing_device = False
 
     async def async_step_init(
-            self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        self, _user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Handle the initial step."""
 
         return await self.async_step_configure_menu()
 
     async def async_step_configure_menu(
-        self, user_input: dict[str, Any] | None = None
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        options = [STEP_CONFIGURE_DEVICE, STEP_EDIT_DEVICE,
-                   STEP_CHANGE_PORT]
+        """Configure menu options."""
+        options = [STEP_CONFIGURE_DEVICE, STEP_EDIT_DEVICE, STEP_CHANGE_PORT]
 
-        return self.async_show_menu(
-            step_id=STEP_CONFIGURE_MENU,
-            menu_options=options
-        )
+        return self.async_show_menu(step_id=STEP_CONFIGURE_MENU, menu_options=options)
 
-    async def async_step_change_port(self, user_input=None) -> FlowResult:
-        """Handle change port"""
+    async def async_step_change_port(self, _user_input=None) -> FlowResult:
+        """Handle change port."""
         return await self.async_step_choose_serial_port()
 
     async def async_step_edit_device(self, user_input=None) -> FlowResult:
@@ -392,14 +394,10 @@ class OptionsFlowHandler(BaseFlow, config_entries.OptionsFlow):
 
             return await self.async_step_configure_device()
 
-        devices = [self._device_data[dev_id][CONF_NAME]
-                   for dev_id in self._device_data]
+        devices = [self._device_data[dev_id][CONF_NAME] for dev_id in self._device_data]
 
-        devices_schema = vol.Schema(
-            {vol.Required(SELECTED_DEVICE): vol.In(devices)})
+        devices_schema = vol.Schema({vol.Required(SELECTED_DEVICE): vol.In(devices)})
 
         return self.async_show_form(
-            step_id=STEP_EDIT_DEVICE,
-            data_schema=devices_schema,
-            errors=errors
+            step_id=STEP_EDIT_DEVICE, data_schema=devices_schema, errors=errors
         )

@@ -75,5 +75,9 @@ mark-parentheses = false
 # Allow for scripts to write to stdout
 "script/*" = ["T20"]
 
-
+[tool.pyright]
+# Suppress false positives for SensorEntityDescription keyword arguments
+# These are valid arguments but type checker doesn't recognize them in frozen dataclass inheritance
+reportCallIssue = false
+reportArgumentType = false
 
