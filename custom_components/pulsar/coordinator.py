@@ -12,10 +12,12 @@ from .const import (
     DATA_KEY_BATTERY_VOLTAGE,
     DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
     DATA_KEY_DEVICE_TEMPERATURE,
+    DATA_KEY_ERROR_FLAGS,
     DATA_KEY_SYSTEM_TIME,
     DEFAULT_SCAN_INTERVAL,
 )
 from .pulsardevice import PulsarDevice
+from .pulsar_m_water import PulsarM
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ class PulsarDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.device = device
         self.device_id = device_id
+        self._firmware_version: int | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from device (in executor to avoid blocking)."""
@@ -46,16 +49,14 @@ class PulsarDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _fetch_data(self) -> dict[str, Any]:
         """Fetch all metrics for device (runs in thread pool)."""
         data: dict[str, Any] = {}
-        # Get all sensor keys for this device type
         sensor_keys = [
             DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
             DATA_KEY_SYSTEM_TIME,
             DATA_KEY_DEVICE_TEMPERATURE,
             DATA_KEY_BATTERY_VOLTAGE,
+            DATA_KEY_ERROR_FLAGS,
         ]
 
-        # Fetch all metrics in one batch
-        # Note: Individual key failures are logged but don't stop the update
         for key in sensor_keys:
             try:
                 value = self.device.getdata(key)
@@ -66,10 +67,20 @@ class PulsarDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "Failed to fetch %s for device %s: %s", key, self.device.name, err
                 )
             except Exception as err:  # pylint: disable=broad-except
-                # Catch other exceptions (protocol errors, parsing errors, etc.)
-                # but log them as warnings to not break the entire update
                 _LOGGER.warning(
                     "Error fetching %s for device %s: %s", key, self.device.name, err
                 )
 
+        if self._firmware_version is None:
+            try:
+                if isinstance(self.device, PulsarM):
+                    self._firmware_version = self.device.read_firmware_version()
+            except Exception:
+                pass
+
         return data
+
+    @property
+    def firmware_version(self) -> int | None:
+        """Return cached firmware version."""
+        return self._firmware_version

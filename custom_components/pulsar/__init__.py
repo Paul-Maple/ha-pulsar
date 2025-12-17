@@ -103,6 +103,14 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Remove a config entry from a device."""
     dev_id = next(iter(device_entry.identifiers))[1]
+
+    # Stop and remove coordinator if it exists
+    if config_entry.runtime_data and dev_id in config_entry.runtime_data.coordinators:
+        coordinator = config_entry.runtime_data.coordinators[dev_id]
+        await coordinator.async_shutdown()
+        config_entry.runtime_data.coordinators.pop(dev_id)
+
+    # Remove entities
     ent_reg = er.async_get(hass)
     entities = {
         ent.unique_id: ent.entity_id
@@ -112,21 +120,23 @@ async def async_remove_config_entry_device(
     for entity_id in entities.values():
         ent_reg.async_remove(entity_id)
 
-    if dev_id not in config_entry.data[CONF_DEVICE_CONFIG]:
+    # Remove device from device registry
+    device_registry = dr.async_get(hass)
+    device_registry.async_remove_device(device_entry.id)
+
+    # Remove device from config entry data if present
+    if dev_id in config_entry.data[CONF_DEVICE_CONFIG]:
+        new_data = config_entry.data.copy()
+        new_data[CONF_DEVICE_CONFIG].pop(dev_id)
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data=new_data,
+        )
+        _LOGGER.info("Device %s removed from config entry.", dev_id)
+    else:
         _LOGGER.info(
             "Device %s not found in config entry: finalizing device removal", dev_id
         )
-        return True
-
-    new_data = config_entry.data.copy()
-    new_data[CONF_DEVICE_CONFIG].pop(dev_id)
-
-    hass.config_entries.async_update_entry(
-        config_entry,
-        data=new_data,
-    )
-
-    _LOGGER.info("Device %s removed.", dev_id)
 
     return True
 
@@ -138,6 +148,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> b
         if entry.runtime_data:
             for coordinator in entry.runtime_data.coordinators.values():
                 await coordinator.async_shutdown()
+
+            # Disconnect the connector in an executor to avoid blocking the event loop
+            # This is required because pyserial's close() contains blocking operations
+            if entry.runtime_data.device_manager is not None:
+                await hass.async_add_executor_job(
+                    entry.runtime_data.device_manager.disconnect
+                )
 
         # Clean up legacy hass.data if it exists
         if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:

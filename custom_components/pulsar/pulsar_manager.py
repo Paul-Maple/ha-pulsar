@@ -40,7 +40,9 @@ class PulsarManager:
             device_type = device_conf[CONF_TYPE]
             if device_type == "pulsar-m-water":
                 device = PulsarM(
-                    self._connector, device_conf[CONF_NAME], device_conf[CONF_SERIAL_ID]
+                    self._connector,
+                    device_conf[CONF_NAME],
+                    device_conf[CONF_SERIAL_ID],
                 )
                 self.add_device(dev_id, device)
 
@@ -119,3 +121,8 @@ class PulsarManager:
             raise PulsarConnectionError("Connector not initialized")
 
         return self._connector.test_connection()
+
+    def disconnect(self) -> None:
+        """Disconnect from the serial port or TCP connection (blocking - call from executor)."""
+        if self._connector is not None:
+            self._connector.disconnect()

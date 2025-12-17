@@ -1,9 +1,7 @@
 from datetime import timedelta
 import enum
 
-from homeassistant.const import (
-    Platform
-)
+from homeassistant.const import Platform
 
 DOMAIN = "pulsar"
 
@@ -40,28 +38,14 @@ DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1 = "current_water_consumption_ch1"
 DATA_KEY_SYSTEM_TIME = "system_time"
 DATA_KEY_DEVICE_TEMPERATURE = "device_temperature"
 DATA_KEY_BATTERY_VOLTAGE = "battery_voltage"
+DATA_KEY_ERROR_FLAGS = "error_flags"
 
 PLATFORMS = [
-    # Platform.ALARM_CONTROL_PANEL,
-    # Platform.BINARY_SENSOR,
-    # Platform.BUTTON,
-    # Platform.CAMERA,
-    # Platform.CLIMATE,
-    # Platform.COVER,
-    # Platform.FAN,
-    # Platform.HUMIDIFIER,
-    # Platform.LIGHT,
-    # Platform.NUMBER,
-    # Platform.SCENE,
-    # Platform.SELECT,
     Platform.SENSOR,
-    # Platform.SIREN,
-    # Platform.SWITCH,
-    # Platform.VACUUM,
 ]
 
 
 class PulsarType(enum.Enum):
-    """Possible options for device type"""
+    """Possible options for device type."""
 
     pulsar_m_water = "pulsar-m-water"

@@ -14,6 +14,7 @@ from .const import (
     DATA_KEY_BATTERY_VOLTAGE,
     DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
     DATA_KEY_DEVICE_TEMPERATURE,
+    DATA_KEY_ERROR_FLAGS,
     DATA_KEY_SYSTEM_TIME,
     PulsarType,
 )
@@ -30,16 +31,18 @@ class PulsarM(PulsarDevice):
     FUNCTION_READ_PARAMETERS = b"\x0a"
     FUNCTION_WRITE_PARAMETERS = b"\x0b"
 
-    def __init__(self, connector: Connector, name: str, addr: int) -> None:
+    def __init__(self, connector: Connector, name: str, serial_number: int) -> None:
         """Initialize Pulsar-M water meter.
 
         Args:
             connector: Serial connector instance.
             name: Device name.
-            addr: Device address.
+            serial_number: Device serial number (used as RS485 address).
 
         """
-        super().__init__(connector, PulsarType.pulsar_m_water.value, name, addr)
+        super().__init__(
+            connector, PulsarType.pulsar_m_water.value, name, serial_number
+        )
 
     def read_current_water_consumption_reading(self) -> int:
         """Read current water consumption reading.
@@ -57,7 +60,7 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             bytes(payload),
             self.FUNCTION_READ_CURRENT_WATER_CONSUMPTION_READING,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
@@ -78,7 +81,7 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             payload,
             self.FUNCTION_READ_SYSTEM_TIME,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
@@ -101,11 +104,11 @@ class PulsarM(PulsarDevice):
             tzinfo=dt_util.UTC,
         )
 
-    def read_diag_params(self) -> str:
-        """Read diagnostic parameters.
+    def read_error_flags(self) -> int:
+        """Read error flags.
 
         Returns:
-            Diagnostic parameters as binary string.
+            Error flags as Uint8 bitmask.
 
         """
         payload_size = 2
@@ -117,12 +120,35 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             bytes(payload),
             self.FUNCTION_READ_PARAMETERS,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
 
-        return bin(response_payload[0])
+        return response_payload[0]
+
+    def read_firmware_version(self) -> int | None:
+        """Read firmware version.
+
+        Returns:
+            Firmware version as Uint16, or None if unavailable.
+
+        """
+        payload_size = 2
+        response_payload_size = 8
+
+        param_code = 5
+        payload = bytearray(payload_size)
+        self.write_hex(param_code, payload, payload_size, 0, False)
+        response_payload = self.send_payload(
+            bytes(payload),
+            self.FUNCTION_READ_PARAMETERS,
+            self.addr,
+            self.next_request_id(),
+            response_payload_size,
+        )
+
+        return self.read_int_from_hex(response_payload, 2, 0, False)
 
     def read_batt_voltage(self) -> float | None:
         """Read battery voltage.
@@ -140,7 +166,7 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             bytes(payload),
             self.FUNCTION_READ_PARAMETERS,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
@@ -163,7 +189,7 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             bytes(payload),
             self.FUNCTION_READ_PARAMETERS,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
@@ -186,7 +212,7 @@ class PulsarM(PulsarDevice):
         response_payload = self.send_payload(
             bytes(payload),
             self.FUNCTION_READ_PARAMETERS,
-            self._addr,
+            self.addr,
             self.next_request_id(),
             response_payload_size,
         )
@@ -212,5 +238,7 @@ class PulsarM(PulsarDevice):
             return self.read_temp()
         if key == DATA_KEY_BATTERY_VOLTAGE:
             return self.read_batt_voltage()
+        if key == DATA_KEY_ERROR_FLAGS:
+            return self.read_error_flags()
 
         return None

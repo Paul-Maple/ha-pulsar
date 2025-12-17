@@ -10,7 +10,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature, UnitOfVolume
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfElectricPotential,
+    UnitOfTemperature,
+    UnitOfVolume,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -20,8 +25,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HomeAssistantPulsarData, PulsarConfigEntry
 from .const import (
+    DATA_KEY_BATTERY_VOLTAGE,
     DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
     DATA_KEY_DEVICE_TEMPERATURE,
+    DATA_KEY_ERROR_FLAGS,
     DATA_KEY_SYSTEM_TIME,
     DOMAIN,
     PULSAR_DISCOVERY_NEW,
@@ -40,26 +47,46 @@ SENSORS: dict[str, tuple[PulsarSensorEntityDescription, ...]] = {
     "pulsar-m-water": (
         PulsarSensorEntityDescription(
             key=DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
-            name="Current water consumption",
             translation_key=DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
             device_class=SensorDeviceClass.WATER,
             state_class=SensorStateClass.TOTAL_INCREASING,
             native_unit_of_measurement=UnitOfVolume.LITERS,
+            suggested_display_precision=0,
             has_entity_name=True,
         ),
         PulsarSensorEntityDescription(
             key=DATA_KEY_SYSTEM_TIME,
-            name="System time",
             translation_key=DATA_KEY_SYSTEM_TIME,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            icon="mdi:clock",
             has_entity_name=True,
         ),
         PulsarSensorEntityDescription(
             key=DATA_KEY_DEVICE_TEMPERATURE,
-            name="Temperature of meter",
             translation_key=DATA_KEY_DEVICE_TEMPERATURE,
             device_class=SensorDeviceClass.TEMPERATURE,
             state_class=SensorStateClass.MEASUREMENT,
             native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+            suggested_display_precision=1,
+            has_entity_name=True,
+        ),
+        PulsarSensorEntityDescription(
+            key=DATA_KEY_BATTERY_VOLTAGE,
+            translation_key=DATA_KEY_BATTERY_VOLTAGE,
+            device_class=SensorDeviceClass.VOLTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+            suggested_display_precision=1,
+            has_entity_name=True,
+        ),
+        PulsarSensorEntityDescription(
+            key=DATA_KEY_ERROR_FLAGS,
+            translation_key=DATA_KEY_ERROR_FLAGS,
+            device_class=None,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=None,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            icon="mdi:alert-circle",
             has_entity_name=True,
         ),
     )
@@ -112,7 +139,6 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
         self.entity_description = description
         self._device_id = device_id
         self._attr_unique_id = f"pulsar.{device_id}.{description.key}"
-        self._attr_name = None  # Use has_entity_name
 
     @property
     def available(self) -> bool:  # type: ignore[override]
@@ -129,9 +155,14 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
     @property
     def device_info(self) -> DeviceInfo:  # type: ignore[override]
         """Return device information."""
+        device = self.coordinator.device
+        sw_version = self.coordinator.firmware_version
+
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
             manufacturer="Pulsar",
-            model=self.coordinator.device.type,
-            name=self.coordinator.device.name,
+            model=device.type,
+            name=device.name,
+            sw_version=str(sw_version) if sw_version is not None else None,
+            serial_number=str(device.serial_number),
         )

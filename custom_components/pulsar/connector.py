@@ -194,10 +194,14 @@ class Connector:
     def disconnect(self) -> None:
         """Disconnect from the serial port or TCP connection."""
         if self._serport is not None and self._serport.is_open:
-            self._serport.close()
-            self._serport = None
-            _LOGGER.info("Closed serial port %s", self._device_or_ipaddress)
-
-    def __del__(self) -> None:
-        """Destructor."""
-        self.disconnect()
+            try:
+                self._serport.close()
+            except (OSError, serial.SerialException) as err:
+                _LOGGER.debug(
+                    "Error closing serial port %s during cleanup: %s",
+                    self._device_or_ipaddress,
+                    err,
+                )
+            finally:
+                self._serport = None
+                _LOGGER.info("Closed serial port %s", self._device_or_ipaddress)

@@ -27,7 +27,7 @@ class PulsarDevice:
     SERVICE_SIZE = ADDR_SIZE + FUNC_SIZE + LEN_SIZE + ID_SIZE + CRC_SIZE
 
     def __init__(
-        self, connector: Connector, device_type: str, name: str, addr: int
+        self, connector: Connector, device_type: str, name: str, serial_number: int
     ) -> None:
         """Initialize Pulsar device.
 
@@ -35,12 +35,13 @@ class PulsarDevice:
             connector: Serial connector instance.
             device_type: Device type identifier.
             name: Device name.
-            addr: Device address.
+            serial_number: Device serial number (used as RS485 address).
+
         """
         self._connector = connector
         self._type = device_type
         self._name = name
-        self._addr = addr
+        self._serial_number = serial_number
         self._request_id = 0
 
     def calculate_crc16(self, buf: bytearray | bytes, size: int, offset: int) -> int:
@@ -106,6 +107,7 @@ class PulsarDevice:
 
         Returns:
             Modified buffer.
+
         """
         for i in range(size):
             buf[size - i - 1 + offset if big_endian else i + offset] = val & 0xFF
@@ -385,6 +387,26 @@ class PulsarDevice:
 
         """
         return self._type
+
+    @property
+    def serial_number(self) -> int:
+        """Return device serial number.
+
+        Returns:
+            Device serial number.
+
+        """
+        return self._serial_number
+
+    @property
+    def addr(self) -> int:
+        """Return device address (alias for serial_number for protocol compatibility).
+
+        Returns:
+            Device address.
+
+        """
+        return self._serial_number
 
     def next_request_id(self) -> int:
         """Get next request ID with wraparound."""

@@ -1,4 +1,6 @@
-# **Pulsar Water Meters: Protocol and Memory Map Documentation (v3.0)**
+# **Pulsar Water Meters: Protocol and Memory Map Documentation**
+
+> Source archive: [link](https://pulsarm.ru/upload/iblock/757/757dbb4ee02863dc7963b89129f34ca5.zip).
 
 This document provides a detailed technical description of the communication protocol and memory maps for the Pulsar family of water meters. The devices are categorized into **6 distinct types (A-F)** based on their data types and register addressing verified against the provided datasheets.
 
