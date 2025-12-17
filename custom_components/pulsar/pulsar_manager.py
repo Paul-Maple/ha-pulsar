@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,9 +16,11 @@ from .const import (
     CONF_SERIAL_ID,
     CONF_TYPE,
 )
+from .device_specs import DEVICE_TYPE_REGISTRY
 from .exceptions import PulsarConnectionError, PulsarException
-from .pulsar_m_water import PulsarM
 from .pulsardevice import PulsarDevice
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PulsarManager:
@@ -38,13 +41,19 @@ class PulsarManager:
         for dev_id in device_confs:
             device_conf = device_confs[dev_id]
             device_type = device_conf[CONF_TYPE]
-            if device_type == "pulsar-m-water":
-                device = PulsarM(
-                    self._connector,
-                    device_conf[CONF_NAME],
-                    device_conf[CONF_SERIAL_ID],
-                )
-                self.add_device(dev_id, device)
+
+            if device_type not in DEVICE_TYPE_REGISTRY:
+                _LOGGER.error("Unknown device type: %s", device_type)
+                continue
+
+            metadata = DEVICE_TYPE_REGISTRY[device_type]
+            device = PulsarDevice(
+                self._connector,
+                metadata,
+                device_conf[CONF_NAME],
+                device_conf[CONF_SERIAL_ID],
+            )
+            self.add_device(dev_id, device)
 
     def get_device(self, device_id: str) -> PulsarDevice | None:
         """Get device by ID.

@@ -97,8 +97,8 @@ class WaterMeterTypeBEmulator(BaseEmulator):
             result[0:2] = self.encode_uint(self.device_id, 2)
 
         elif param_index == 0x0001:
-            # Network Address (UINT32)
-            result[0:4] = self.encode_uint(self.device_address, 4)
+            # Daylight Saving (UINT16)
+            result[0:2] = self.encode_uint(self.daylight_saving, 2)
 
         elif param_index == 0x0002:
             # Firmware Version (UINT64)
@@ -108,6 +108,14 @@ class WaterMeterTypeBEmulator(BaseEmulator):
             result[6] = self.revision
             result[7] = self.modification
 
+        elif param_index == 0x0005:
+            # Firmware Version (UINT16, legacy)
+            result[0:2] = self.encode_uint(self.fw_version_legacy, 2)
+
+        elif param_index == 0x0006:
+            # Error Flags (UINT8, bitmask)
+            result[0] = self.current_errors
+
         elif param_index == 0x000A:
             # Battery Voltage (Float32, V)
             result[0:4] = self.encode_float32(self.battery_voltage)
@@ -115,18 +123,6 @@ class WaterMeterTypeBEmulator(BaseEmulator):
         elif param_index == 0x000B:
             # Temperature (Float32, °C)
             result[0:4] = self.encode_float32(self.environment_temp)
-
-        elif param_index == 0x0006:
-            # Error Flags (UINT8, bitmask)
-            result[0] = self.current_errors
-
-        elif param_index == 0x0001:
-            # Daylight Saving (UINT16)
-            result[0:2] = self.encode_uint(self.daylight_saving, 2)
-
-        elif param_index == 0x0005:
-            # Firmware Version (UINT16, legacy)
-            result[0:2] = self.encode_uint(self.fw_version_legacy, 2)
 
         else:
             return None

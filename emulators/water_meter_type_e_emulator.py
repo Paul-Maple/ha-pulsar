@@ -1,6 +1,6 @@
 """Pulsar Water Meter Type E Emulator - Electronic Meters (Gen 1).
 
-Returns Float32 volume values with Channel 8 error flags.
+Returns Float32 volume and flow rate values with parameter-based diagnostics.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from config_loader import load_config, get_device_config
 
 
 class WaterMeterTypeEEmulator(BaseEmulator):
-    """Type E: Electronic Gen 1 emulator (Float32 format, channel 8 errors)."""
+    """Type E: Electronic Gen 1 emulator (Float32 format, channel 2 flow rate)."""
 
     def __init__(self, port: int | None = None, config_path: str | None = None):
         """Initialize Type E water meter emulator.
@@ -33,12 +33,13 @@ class WaterMeterTypeEEmulator(BaseEmulator):
         # Channel data (Float32)
         channels = device_config["channels"]
         self.channel_1_volume_forward = channels["volume_forward"]
-        self.channel_8_error_flags = channels["error_flags"]
+        self.channel_2_flow_rate = channels["flow_rate"]
 
         # Parameters
         params = device_config["parameters"]
         self.battery_voltage = params["battery_voltage"]  # mV (UINT16)
-        self.flow_rate = params["flow_rate"]  # m³/h (Float32)
+        self.error_flags = params["error_flags"]  # UINT16
+        self.rssi = params.get("rssi", -70)  # INT8, dBm
 
         # Firmware version
         fw = device_config["firmware"]
@@ -57,7 +58,7 @@ class WaterMeterTypeEEmulator(BaseEmulator):
     def get_channel_data(self, channel_mask: int) -> bytes | None:
         """Get channel data for Type E water meter.
 
-        Type E has Channel 1 (Volume Forward) and Channel 8 (Error Flags) as Float32.
+        Type E has Channel 1 (Volume Forward) and Channel 2 (Flow Rate) as Float32.
 
         Args:
             channel_mask: Bitmask of channels to read.
@@ -74,12 +75,12 @@ class WaterMeterTypeEEmulator(BaseEmulator):
         if channel_mask & 0x01:
             channel_data.extend(self.encode_float32(self.channel_1_volume_forward))
 
-        # Channel 8: Error Flags (Float32)
-        if channel_mask & 0x80:
-            channel_data.extend(self.encode_float32(self.channel_8_error_flags))
+        # Channel 2: Flow Rate (Float32)
+        if channel_mask & 0x02:
+            channel_data.extend(self.encode_float32(self.channel_2_flow_rate))
 
         # Reject if requesting other channels
-        if channel_mask & ~0x81:  # Only bits 0 and 7 are valid
+        if channel_mask & ~0x03:  # Only bits 0 and 1 are valid (0x01, 0x02)
             return None
 
         return bytes(channel_data) if len(channel_data) > 0 else None
@@ -115,9 +116,16 @@ class WaterMeterTypeEEmulator(BaseEmulator):
             # Battery Voltage (UINT16, mV)
             result[0:2] = self.encode_uint(self.battery_voltage, 2)
 
-        elif param_index == 0x0100:
-            # Flow Rate (Float32, m³/h)
-            result[0:4] = self.encode_float32(self.flow_rate)
+        elif param_index == 0x0010:
+            # Error Flags (UINT16, bitmask)
+            result[0:2] = self.encode_uint(self.error_flags, 2)
+
+        elif param_index == 0x0206:
+            # RSSI (INT8, dBm)
+            rssi_byte = self.rssi & 0xFF
+            if self.rssi < 0:
+                rssi_byte = (self.rssi + 256) & 0xFF
+            result[0] = rssi_byte
 
         else:
             return None
@@ -134,7 +142,7 @@ class WaterMeterTypeEEmulator(BaseEmulator):
         """Get archive data for Type E water meter (Float32 format).
 
         Args:
-            channel_mask: Single channel mask (must be 0x01 or 0x80).
+            channel_mask: Single channel mask (must be 0x01 or 0x02).
             archive_type: Archive type (1=hourly, 2=daily, 3=monthly).
             date_start: Start datetime.
             date_end: End datetime.
@@ -146,7 +154,7 @@ class WaterMeterTypeEEmulator(BaseEmulator):
         if channel_mask == 0 or (channel_mask & (channel_mask - 1)) != 0:
             return None
 
-        if channel_mask not in [0x01, 0x80]:
+        if channel_mask not in [0x01, 0x02]:
             return None
 
         if archive_type not in [1, 2, 3]:
@@ -154,7 +162,9 @@ class WaterMeterTypeEEmulator(BaseEmulator):
 
         # Determine base value
         base_value = (
-            self.channel_1_volume_forward if channel_mask == 0x01 else self.channel_8_error_flags
+            self.channel_1_volume_forward
+            if channel_mask == 0x01
+            else self.channel_2_flow_rate
         )
 
         response = bytearray()
@@ -166,14 +176,14 @@ class WaterMeterTypeEEmulator(BaseEmulator):
             num_records = min(
                 24, int((date_end - date_start).total_seconds() / 3600) + 1
             )
-            increment = 0.5 if channel_mask == 0x01 else 0.0
+            increment = 0.5 if channel_mask == 0x01 else 0.1
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
 
         elif archive_type == 2:
             num_records = min(7, (date_end - date_start).days + 1)
-            increment = 12.0 if channel_mask == 0x01 else 0.0
+            increment = 12.0 if channel_mask == 0x01 else 2.0
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
@@ -188,7 +198,7 @@ class WaterMeterTypeEEmulator(BaseEmulator):
                 )
                 + 1,
             )
-            increment = 360.0 if channel_mask == 0x01 else 0.0
+            increment = 360.0 if channel_mask == 0x01 else 60.0
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
@@ -218,4 +228,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
+import uuid
 
 import serial.tools.list_ports
 import voluptuous as vol
@@ -13,8 +13,8 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowHandler, FlowResult
-from homeassistant.util import dt as dt_util
 import homeassistant.helpers.config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from .connector import Connector
 from .const import (
@@ -33,21 +33,62 @@ from .const import (
     STEP_CONFIGURE_MENU,
     STEP_EDIT_DEVICE,
     STEP_MANUAL_PORT_CONFIG,
-    PulsarType,
 )
+from .device_specs import DEVICE_TYPE_REGISTRY, DeviceType
 from .exceptions import PulsarConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
-DEVICE_CONFIG_SCHEMA_ENTRY = vol.Schema(
-    {
-        vol.Required(CONF_NAME): cv.string,
-        vol.Required(CONF_SERIAL_ID): cv.positive_int,
-        vol.Required(CONF_TYPE): vol.In([e.value for e in PulsarType]),
-    }
-)
-
 SELECTED_DEVICE = "selected_device"
+
+
+def get_device_type_options() -> dict[str, str]:
+    """Get device type options for dropdown using model_name from device specs.
+
+    Returns:
+        Dictionary mapping device type enum values to model names.
+
+    """
+    options: dict[str, str] = {}
+    for device_type in DeviceType:
+        metadata = DEVICE_TYPE_REGISTRY.get(device_type)
+        if metadata:
+            options[device_type.value] = metadata.model_name
+        else:
+            options[device_type.value] = device_type.value
+    return options
+
+
+def create_device_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Create device config schema with device type options.
+
+    Args:
+        defaults: Default values for the schema.
+
+    Returns:
+        Voluptuous schema for device configuration.
+
+    """
+    device_type_options = get_device_type_options()
+
+    if defaults is None:
+        defaults = {
+            CONF_NAME: "",
+            CONF_SERIAL_ID: "",
+            CONF_TYPE: next(iter(DeviceType)).value,
+        }
+
+    return vol.Schema(
+        {
+            vol.Optional(CONF_NAME, default=defaults[CONF_NAME]): cv.string,
+            vol.Optional(
+                CONF_SERIAL_ID, default=defaults[CONF_SERIAL_ID]
+            ): cv.positive_int,
+            vol.Optional(CONF_TYPE, default=defaults[CONF_TYPE]): vol.In(
+                device_type_options
+            ),
+        }
+    )
 
 
 def schema_defaults(schema, dps_list=None, **defaults):
@@ -124,12 +165,17 @@ class BaseFlow(FlowHandler):
             }
 
             self.hass.config_entries.async_update_entry(
-                self._config_entry, data=data, options=options
+                self._config_entry,
+                data=data,
+                options=options,
+                title=f"Pulsar ({self._device_or_address})",
             )
 
             return self.async_create_entry(title="", data={})
 
-        return self.async_create_entry(title="Pulsar", data=data)
+        return self.async_create_entry(
+            title=f"Pulsar ({self._device_or_address})", data=data
+        )
 
     async def async_step_choose_serial_port(
         self, user_input: dict[str, Any] | None = None
@@ -278,7 +324,7 @@ class BaseFlow(FlowHandler):
         if user_input is None:
             user_input = {}
 
-        types = [e.value for e in PulsarType]
+        types = [e.value for e in DeviceType]
 
         base_defaults = {}
         base_defaults[CONF_NAME] = ""
@@ -303,7 +349,7 @@ class BaseFlow(FlowHandler):
             defaults = base_defaults
             placeholders = {"for_device": ""}
 
-        schema = schema_defaults(DEVICE_CONFIG_SCHEMA_ENTRY, **defaults)
+        schema = create_device_config_schema(defaults)
 
         return self.async_show_form(
             step_id=STEP_CONFIGURE_DEVICE,

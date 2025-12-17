@@ -11,15 +11,8 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 import homeassistant.helpers.entity_registry as er
-from homeassistant.helpers.typing import ConfigType
 
-from .const import (
-    CONF_DEVICE_CONFIG,
-    DATA_PULSAR,
-    DATA_PULSAR_CONFIG,
-    DOMAIN,
-    PLATFORMS,
-)
+from .const import CONF_DEVICE_CONFIG, DOMAIN, MANUFACTURER, PLATFORMS
 from .coordinator import PulsarDataUpdateCoordinator
 from .pulsar_manager import PulsarManager
 
@@ -39,17 +32,6 @@ type PulsarConfigEntry = ConfigEntry[HomeAssistantPulsarData]
 
 # Internal definitions
 _LOGGER = logging.getLogger(__name__)
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up Pulsar from config."""
-    hass.data[DATA_PULSAR] = {}
-
-    if DOMAIN in config:
-        conf = config[DOMAIN]
-        hass.data[DATA_PULSAR][DATA_PULSAR_CONFIG] = conf
-
-    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bool:
@@ -81,9 +63,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bo
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, device_id)},
-            manufacturer="Pulsar",
+            manufacturer=MANUFACTURER,
             name=device.name,
-            model=device.type,
+            model=device.metadata.type_id,
         )
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
@@ -143,23 +125,17 @@ async def async_remove_config_entry_device(
 
 async def async_unload_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+    if (
+        unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    ) and entry.runtime_data:
         # Clean up coordinators
-        if entry.runtime_data:
-            for coordinator in entry.runtime_data.coordinators.values():
-                await coordinator.async_shutdown()
+        for coordinator in entry.runtime_data.coordinators.values():
+            await coordinator.async_shutdown()
 
-            # Disconnect the connector in an executor to avoid blocking the event loop
-            # This is required because pyserial's close() contains blocking operations
-            if entry.runtime_data.device_manager is not None:
-                await hass.async_add_executor_job(
-                    entry.runtime_data.device_manager.disconnect
-                )
-
-        # Clean up legacy hass.data if it exists
-        if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
-            hass.data[DOMAIN].pop(entry.entry_id)
-            if not hass.config_entries.async_entries(DOMAIN):
-                hass.data.pop(DOMAIN)
+        # Disconnect the connector in an executor to avoid blocking the event loop
+        if entry.runtime_data.device_manager is not None:
+            await hass.async_add_executor_job(
+                entry.runtime_data.device_manager.disconnect
+            )
 
     return unload_ok

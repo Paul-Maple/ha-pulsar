@@ -36,6 +36,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
         self.channel_6_volume_total = channels["volume_total"]
         self.channel_7_volume_cold = channels["volume_cold"]
         self.channel_8_volume_hot = channels["volume_hot"]
+        self.channel_9_flow_rate = channels.get("flow_rate", 0.0)  # m³/h (Float32)
 
         # Parameters
         params = device_config["parameters"]
@@ -43,6 +44,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
         self.environment_temp = params["environment_temp"]  # °C (UINT8)
         self.device_status = params["device_status"]  # UINT8
         self.current_errors = params["current_errors"]  # UINT32
+        self.operating_time = params.get("operating_time", 0)  # hours (UINT32)
 
         # Firmware version
         fw = device_config["firmware"]
@@ -61,7 +63,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
     def get_channel_data(self, channel_mask: int) -> bytes | None:
         """Get channel data for Type D water meter.
 
-        Type D has multiple channels (3, 6, 7, 8) as Float32.
+        Type D has multiple channels (3, 6, 7, 8, 9) as Float32.
 
         Args:
             channel_mask: Bitmask of channels to read.
@@ -81,6 +83,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
             (0x20, self.encode_float32(self.channel_6_volume_total)),  # Ch 6: Vol Total
             (0x40, self.encode_float32(self.channel_7_volume_cold)),  # Ch 7: Vol Cold
             (0x80, self.encode_float32(self.channel_8_volume_hot)),  # Ch 8: Vol Hot
+            (0x100, self.encode_float32(self.channel_9_flow_rate)),  # Ch 9: Flow Rate
         ]
 
         # Add requested channels in order
@@ -90,8 +93,8 @@ class WaterMeterTypeDEmulator(BaseEmulator):
 
         # Reject if requesting non-existent channels
         if (
-            channel_mask & ~0xE4
-        ):  # Only bits 2, 5, 6, 7 are valid (0x04, 0x20, 0x40, 0x80)
+            channel_mask & ~0x1E4
+        ):  # Only bits 2, 5, 6, 7, 8 are valid (0x04, 0x20, 0x40, 0x80, 0x100)
             return None
 
         return bytes(channel_data) if len(channel_data) > 0 else None
@@ -140,6 +143,10 @@ class WaterMeterTypeDEmulator(BaseEmulator):
             # Error Flags (UINT32, bitmask)
             result[0:4] = self.encode_uint(self.current_errors, 4)
 
+        elif param_index == 0x000C:
+            # Operating Time (UINT32, hours)
+            result[0:4] = self.encode_uint(self.operating_time, 4)
+
         else:
             return None
 
@@ -155,7 +162,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
         """Get archive data for Type D water meter (Float32 format).
 
         Args:
-            channel_mask: Single channel mask (must be one of 0x04, 0x20, 0x40, 0x80).
+            channel_mask: Single channel mask (must be one of 0x04, 0x20, 0x40, 0x80, 0x100).
             archive_type: Archive type (1=hourly, 2=daily, 3=monthly).
             date_start: Start datetime.
             date_end: End datetime.
@@ -177,6 +184,7 @@ class WaterMeterTypeDEmulator(BaseEmulator):
             0x20: self.channel_6_volume_total,
             0x40: self.channel_7_volume_cold,
             0x80: self.channel_8_volume_hot,
+            0x100: self.channel_9_flow_rate,
         }
 
         if channel_mask not in channel_values:

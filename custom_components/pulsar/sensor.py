@@ -2,99 +2,41 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorEntityDescription,
-    SensorStateClass,
-)
-from homeassistant.const import (
-    EntityCategory,
-    UnitOfElectricPotential,
-    UnitOfTemperature,
-    UnitOfVolume,
-)
+from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HomeAssistantPulsarData, PulsarConfigEntry
-from .const import (
-    DATA_KEY_BATTERY_VOLTAGE,
-    DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
-    DATA_KEY_DEVICE_TEMPERATURE,
-    DATA_KEY_ERROR_FLAGS,
-    DATA_KEY_SYSTEM_TIME,
-    DOMAIN,
-    PULSAR_DISCOVERY_NEW,
-)
+from .const import DOMAIN, MANUFACTURER
 from .coordinator import PulsarDataUpdateCoordinator
+from .device_specs import DeviceTypeMetadata
 
 
-@dataclass(frozen=True)
-class PulsarSensorEntityDescription(SensorEntityDescription):
-    """Describes Pulsar sensor entity."""
-
-    subkey: str | None = None
-
-
-SENSORS: dict[str, tuple[PulsarSensorEntityDescription, ...]] = {
-    "pulsar-m-water": (
-        PulsarSensorEntityDescription(
-            key=DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
-            translation_key=DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1,
-            device_class=SensorDeviceClass.WATER,
-            state_class=SensorStateClass.TOTAL_INCREASING,
-            native_unit_of_measurement=UnitOfVolume.LITERS,
-            suggested_display_precision=0,
+def create_sensor_descriptions(
+    metadata: DeviceTypeMetadata,
+) -> tuple[SensorEntityDescription, ...]:
+    """Create sensor descriptions from device metadata."""
+    return tuple(
+        SensorEntityDescription(
+            key=data_spec.key,
+            translation_key=data_spec.translation_key or data_spec.key,
+            device_class=data_spec.device_class,
+            state_class=data_spec.state_class,
+            native_unit_of_measurement=data_spec.unit,
+            suggested_display_precision=data_spec.display_precision,
+            entity_category=data_spec.entity_category,
+            icon=data_spec.icon,
             has_entity_name=True,
-        ),
-        PulsarSensorEntityDescription(
-            key=DATA_KEY_SYSTEM_TIME,
-            translation_key=DATA_KEY_SYSTEM_TIME,
-            entity_category=EntityCategory.DIAGNOSTIC,
-            icon="mdi:clock",
-            has_entity_name=True,
-        ),
-        PulsarSensorEntityDescription(
-            key=DATA_KEY_DEVICE_TEMPERATURE,
-            translation_key=DATA_KEY_DEVICE_TEMPERATURE,
-            device_class=SensorDeviceClass.TEMPERATURE,
-            state_class=SensorStateClass.MEASUREMENT,
-            native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-            suggested_display_precision=1,
-            has_entity_name=True,
-        ),
-        PulsarSensorEntityDescription(
-            key=DATA_KEY_BATTERY_VOLTAGE,
-            translation_key=DATA_KEY_BATTERY_VOLTAGE,
-            device_class=SensorDeviceClass.VOLTAGE,
-            state_class=SensorStateClass.MEASUREMENT,
-            native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-            suggested_display_precision=1,
-            has_entity_name=True,
-        ),
-        PulsarSensorEntityDescription(
-            key=DATA_KEY_ERROR_FLAGS,
-            translation_key=DATA_KEY_ERROR_FLAGS,
-            device_class=None,
-            state_class=SensorStateClass.MEASUREMENT,
-            native_unit_of_measurement=None,
-            entity_category=EntityCategory.DIAGNOSTIC,
-            icon="mdi:alert-circle",
-            has_entity_name=True,
-        ),
+        )
+        for data_spec in metadata.data_specs
     )
-}
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: PulsarConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -110,19 +52,16 @@ async def async_setup_entry(
             if coordinator is None:
                 continue
             device = coordinator.device
-            if descriptions := SENSORS.get(device.type):
-                entities.extend(
-                    PulsarSensorEntity(coordinator, device_id, description)
-                    for description in descriptions
-                )
+            metadata = device.metadata
+            descriptions = create_sensor_descriptions(metadata)
+            entities.extend(
+                PulsarSensorEntity(coordinator, device_id, description)
+                for description in descriptions
+            )
 
         async_add_entities(entities)
 
     async_discover_device([*hass_data.coordinators.keys()])
-
-    entry.async_on_unload(
-        async_dispatcher_connect(hass, PULSAR_DISCOVERY_NEW, async_discover_device)
-    )
 
 
 class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorEntity):
@@ -132,7 +71,7 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
         self,
         coordinator: PulsarDataUpdateCoordinator,
         device_id: str,
-        description: PulsarSensorEntityDescription,
+        description: SensorEntityDescription,
     ) -> None:
         """Initialize Pulsar sensor entity."""
         super().__init__(coordinator)
@@ -156,13 +95,16 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
     def device_info(self) -> DeviceInfo:  # type: ignore[override]
         """Return device information."""
         device = self.coordinator.device
-        sw_version = self.coordinator.firmware_version
+        sw_version = self.coordinator.sw_version
+        hw_version = self.coordinator.hw_version
 
+        metadata = device.metadata
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
-            manufacturer="Pulsar",
-            model=device.type,
+            manufacturer=MANUFACTURER,
+            model=metadata.model_name,
             name=device.name,
             sw_version=str(sw_version) if sw_version is not None else None,
+            hw_version=str(hw_version) if hw_version is not None else None,
             serial_number=str(device.serial_number),
         )

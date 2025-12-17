@@ -66,11 +66,13 @@ water_meter_type_d:
     volume_total: 567.89 # m³ (Channel 6, Float32)
     volume_cold: 300.12 # m³ (Channel 7, Float32)
     volume_hot: 267.77 # m³ (Channel 8, Float32)
+    flow_rate: 0.5 # m³/h (Channel 9, Float32)
   parameters:
     battery_voltage: 3600 # mV (UINT16)
     environment_temp: 22 # °C (UINT8)
     device_status: 0 # UINT8
     current_errors: 0 # UINT32
+    operating_time: 8760 # hours (UINT32)
   firmware:
     fw_number: 150
     hw_version: 11
@@ -78,17 +80,18 @@ water_meter_type_d:
     revision: 2
     modification: 1
 
-# Water Meter Type E: Electronic Gen 1 (Float32, channel 8 errors)
+# Water Meter Type E: Electronic Gen 1 (Float32, channel 2 flow rate)
 water_meter_type_e:
   port: 9605
   address: 12345678
   device_id: 439
   channels:
     volume_forward: 1234.567 # m³ (Channel 1, Float32)
-    error_flags: 0.0 # Channel 8, Float32
+    flow_rate: 0.5 # m³/h (Channel 2, Float32)
   parameters:
     battery_voltage: 3600 # mV (UINT16)
-    flow_rate: 0.5 # m³/h (Float32)
+    error_flags: 0 # UINT16 (Parameter 0x0010)
+    rssi: -70 # dBm (INT8, Parameter 0x0206)
   firmware:
     fw_number: 150
     hw_version: 11

@@ -108,20 +108,126 @@
   },
   "entity": {
     "sensor": {
-      "current_water_consumption_ch1": {
-        "name": "Consumption"
+      "volume": {
+        "name": "Volume"
       },
-      "system_time": {
-        "name": "System time"
+      "volume_total": {
+        "name": "Total volume"
+      },
+      "volume_cold": {
+        "name": "Cold water volume"
+      },
+      "volume_hot": {
+        "name": "Hot water volume"
+      },
+      "volume_forward": {
+        "name": "Forward volume"
+      },
+      "volume_supply": {
+        "name": "Supply volume"
+      },
+      "volume_return": {
+        "name": "Return volume"
+      },
+      "temperature": {
+        "name": "Temperature"
       },
       "device_temperature": {
         "name": "Device temperature"
+      },
+      "temp_supply": {
+        "name": "Supply temperature"
+      },
+      "temp_return": {
+        "name": "Return temperature"
+      },
+      "environment_temp": {
+        "name": "Environment temperature"
       },
       "battery_voltage": {
         "name": "Battery voltage"
       },
       "error_flags": {
         "name": "Error flags"
+      },
+      "device_date_time": {
+        "name": "Device date/time"
+      },
+      "flow_rate": {
+        "name": "Flow rate"
+      },
+      "flow_threshold_min": {
+        "name": "Flow threshold minimum"
+      },
+      "flow_threshold_max": {
+        "name": "Flow threshold maximum"
+      },
+      "energy_heat": {
+        "name": "Heat energy"
+      },
+      "energy_heat_kwh": {
+        "name": "Heat energy"
+      },
+      "energy_cooling": {
+        "name": "Cooling energy"
+      },
+      "energy_cooling_kwh": {
+        "name": "Cooling energy"
+      },
+      "operation_time": {
+        "name": "Operation time"
+      },
+      "operating_time": {
+        "name": "Operating time"
+      },
+      "pulse_input_1": {
+        "name": "Pulse input 1"
+      },
+      "pulse_input_2": {
+        "name": "Pulse input 2"
+      },
+      "pulse_input_3": {
+        "name": "Pulse input 3"
+      },
+      "pulse_input_4": {
+        "name": "Pulse input 4"
+      },
+      "pressure_supply": {
+        "name": "Supply pressure"
+      },
+      "pressure_return": {
+        "name": "Return pressure"
+      },
+      "last_rssi": {
+        "name": "Last RSSI"
+      },
+      "rssi": {
+        "name": "RSSI"
+      },
+      "last_rf_error": {
+        "name": "Last RF error"
+      },
+      "reed_switch": {
+        "name": "Reed switch"
+      },
+      "device_status": {
+        "name": "Device status"
+      },
+      "module_detached": {
+        "name": "Module detached"
+      }
+    }
+  },
+  "selector": {
+    "device_type": {
+      "options": {
+        "water_type_a": "Water: Pulse Module (IoT/Mini)",
+        "water_type_b": "Water: Mechanical (Pulsar-M)",
+        "water_type_c": "Water: RS485",
+        "water_type_d": "Water: Two-Tariff",
+        "water_type_e": "Water: Electronic Gen1",
+        "water_type_f": "Water: Electronic Gen2",
+        "heat_meter": "Heat Meter"
       }
     }
   }

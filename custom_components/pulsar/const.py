@@ -1,13 +1,19 @@
+"""Constants for the Pulsar integration."""
+
 from datetime import timedelta
-import enum
 
 from homeassistant.const import Platform
 
 DOMAIN = "pulsar"
+MANUFACTURER = "Pulsar"
 
-DATA_PULSAR = "pulsar"
-DATA_PULSAR_CONFIG = "pulsar_device_config"
-DATA_PULSAR_MANAGER = "pulsar_manager"
+ADDR_SIZE = 4
+FUNC_SIZE = 1
+LEN_SIZE = 1
+ID_SIZE = 2
+CRC_SIZE = 2
+SERVICE_SIZE = ADDR_SIZE + FUNC_SIZE + LEN_SIZE + ID_SIZE + CRC_SIZE
+MAX_REQUEST_ID = 0xFFFF
 
 CONF_ACTION = "action"
 CONF_ENTITIES = "entities"
@@ -30,22 +36,8 @@ STEP_CONFIGURE_MENU = "configure_menu"
 STEP_CHOOSE_SERIAL_PORT = "choose_serial_port"
 STEP_MANUAL_PORT_CONFIG = "manual_port_config"
 
-PULSAR_DISCOVERY_NEW = "pulsar_discovery_new"
-
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
-
-DATA_KEY_CURRENT_WATER_CONSUMPTION_CH1 = "current_water_consumption_ch1"
-DATA_KEY_SYSTEM_TIME = "system_time"
-DATA_KEY_DEVICE_TEMPERATURE = "device_temperature"
-DATA_KEY_BATTERY_VOLTAGE = "battery_voltage"
-DATA_KEY_ERROR_FLAGS = "error_flags"
 
 PLATFORMS = [
     Platform.SENSOR,
 ]
-
-
-class PulsarType(enum.Enum):
-    """Possible options for device type."""
-
-    pulsar_m_water = "pulsar-m-water"

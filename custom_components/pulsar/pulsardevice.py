@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import datetime
 import struct
-from typing import Any
 
 from .connector import Connector
+from .const import (
+    ADDR_SIZE,
+    CRC_SIZE,
+    FUNC_SIZE,
+    ID_SIZE,
+    LEN_SIZE,
+    MAX_REQUEST_ID,
+    SERVICE_SIZE,
+)
+from .device_specs import DataSpec, DevicePropertySpec, DeviceTypeMetadata
 from .exceptions import (
     PulsarAddressError,
     PulsarCRCError,
@@ -19,27 +29,24 @@ from .exceptions import (
 class PulsarDevice:
     """Base class for Pulsar devices."""
 
-    ADDR_SIZE = 4
-    FUNC_SIZE = 1
-    LEN_SIZE = 1
-    ID_SIZE = 2
-    CRC_SIZE = 2
-    SERVICE_SIZE = ADDR_SIZE + FUNC_SIZE + LEN_SIZE + ID_SIZE + CRC_SIZE
-
     def __init__(
-        self, connector: Connector, device_type: str, name: str, serial_number: int
+        self,
+        connector: Connector,
+        metadata: DeviceTypeMetadata,
+        name: str,
+        serial_number: int,
     ) -> None:
         """Initialize Pulsar device.
 
         Args:
             connector: Serial connector instance.
-            device_type: Device type identifier.
+            metadata: Device type metadata.
             name: Device name.
             serial_number: Device serial number (used as RS485 address).
 
         """
         self._connector = connector
-        self._type = device_type
+        self._metadata = metadata
         self._name = name
         self._serial_number = serial_number
         self._request_id = 0
@@ -56,8 +63,6 @@ class PulsarDevice:
             CRC-16 value.
 
         """
-        poly = 0xA001
-        crc = 0xFFFF
         poly = 0xA001
         crc = 0xFFFF
         for i in range(size):
@@ -191,12 +196,7 @@ class PulsarDevice:
             raise PulsarDataError(f"Unsupported float size: {size}")
 
         val = struct.unpack(format_str, buf[offset : size + offset])
-
-        if len(val) == 1:
-            return val[0]
-        if len(val) == 0:
-            return None
-        return val[0]  # Return first value if multiple
+        return val[0] if val else None
 
     def send_request(self, message: bytes, response_size: int) -> bytes:
         """Send request and receive response.
@@ -212,9 +212,9 @@ class PulsarDevice:
             PulsarFrameError: If response validation fails.
 
         """
-        addr = self.read_bcd(message, self.ADDR_SIZE, 0, True)
+        addr = self.read_bcd(message, ADDR_SIZE, 0, True)
         request_id = self.read_int_from_hex(
-            message, self.ID_SIZE, len(message) - self.ID_SIZE - self.CRC_SIZE, False
+            message, ID_SIZE, len(message) - ID_SIZE - CRC_SIZE, False
         )
         expected_response_size = response_size
 
@@ -250,9 +250,9 @@ class PulsarDevice:
 
         """
         request = self.prepare_request(payload, function, addr, request_id)
-        response = self.send_request(request, expected_payload_size + self.SERVICE_SIZE)
-        start_ind = self.ADDR_SIZE + self.FUNC_SIZE + self.LEN_SIZE
-        end_ind = 0 - self.ID_SIZE - self.CRC_SIZE
+        response = self.send_request(request, expected_payload_size + SERVICE_SIZE)
+        start_ind = ADDR_SIZE + FUNC_SIZE + LEN_SIZE
+        end_ind = 0 - ID_SIZE - CRC_SIZE
         return response[start_ind:end_ind]
 
     def check_response(
@@ -278,10 +278,8 @@ class PulsarDevice:
         """
         response_size = len(response)
 
-        if response_size < self.SERVICE_SIZE:
-            raise PulsarFrameError(
-                f"Frame too short: {response_size} < {self.SERVICE_SIZE}"
-            )
+        if response_size < SERVICE_SIZE:
+            raise PulsarFrameError(f"Frame too short: {response_size} < {SERVICE_SIZE}")
 
         if response_size != expected_response_size:
             raise PulsarFrameError(
@@ -295,24 +293,22 @@ class PulsarDevice:
 
         # check crc16
         response_crc = self.read_int_from_hex(
-            response, self.CRC_SIZE, response_size - self.CRC_SIZE, False
+            response, CRC_SIZE, response_size - CRC_SIZE, False
         )
-        calc_response_crc = self.calculate_crc16(
-            response, response_size - self.CRC_SIZE, 0
-        )
+        calc_response_crc = self.calculate_crc16(response, response_size - CRC_SIZE, 0)
         if response_crc != calc_response_crc:
             raise PulsarCRCError(
                 f"CRC mismatch: {response_crc:04X} != {calc_response_crc:04X}"
             )
 
         # check address
-        response_addr = self.read_bcd(response, self.ADDR_SIZE, 0, True)
+        response_addr = self.read_bcd(response, ADDR_SIZE, 0, True)
         if response_addr != addr:
             raise PulsarAddressError(f"Address mismatch: {response_addr} != {addr}")
 
         # check request id
         response_request_id = self.read_int_from_hex(
-            response, self.ID_SIZE, response_size - self.ID_SIZE - self.CRC_SIZE, False
+            response, ID_SIZE, response_size - ID_SIZE - CRC_SIZE, False
         )
         if response_request_id != request_id:
             raise PulsarRequestIdError(
@@ -345,7 +341,7 @@ class PulsarDevice:
             )
 
         payload_size = len(payload)
-        request_size = payload_size + self.SERVICE_SIZE
+        request_size = payload_size + SERVICE_SIZE
 
         request = bytearray(request_size)
 
@@ -356,7 +352,7 @@ class PulsarDevice:
         request[5] = request_size
 
         # payload
-        offset = self.ADDR_SIZE + self.FUNC_SIZE + self.LEN_SIZE
+        offset = ADDR_SIZE + FUNC_SIZE + LEN_SIZE
         request[offset : offset + payload_size] = payload
 
         # request ID
@@ -379,14 +375,14 @@ class PulsarDevice:
         return self._name
 
     @property
-    def type(self) -> str:
-        """Return device type.
+    def metadata(self) -> DeviceTypeMetadata:
+        """Return device metadata.
 
         Returns:
-            Device type identifier.
+            Device type metadata.
 
         """
-        return self._type
+        return self._metadata
 
     @property
     def serial_number(self) -> int:
@@ -398,31 +394,143 @@ class PulsarDevice:
         """
         return self._serial_number
 
-    @property
-    def addr(self) -> int:
-        """Return device address (alias for serial_number for protocol compatibility).
-
-        Returns:
-            Device address.
-
-        """
-        return self._serial_number
-
     def next_request_id(self) -> int:
         """Get next request ID with wraparound."""
         self._request_id += 1
-        if self._request_id > 65535:
+        if self._request_id > MAX_REQUEST_ID:
             self._request_id = 0
         return self._request_id
 
-    def getdata(self, _key: str) -> Any:
-        """Get data value by key.
+    def read_data(
+        self, spec: DataSpec | DevicePropertySpec
+    ) -> int | float | str | datetime.datetime | None:
+        """Read data value from channel, parameter, or device property.
 
         Args:
-            key: Data key identifier.
+            spec: Data or property specification.
 
         Returns:
-            Data value or None if not available.
+            Data value or None if unavailable.
 
         """
+        if spec.payload_size == 0:
+            payload = bytes(0)
+        else:
+            payload = bytearray(spec.payload_size)
+            self.write_hex(spec.address, payload, spec.payload_size, 0, False)
+            payload = bytes(payload)
+        function = bytes([spec.function_code])
+
+        try:
+            response_payload = self.send_payload(
+                payload,
+                function,
+                self._serial_number,
+                self.next_request_id(),
+                spec.response_size,
+            )
+            value = self._parse_response(response_payload, spec.data_type)
+            if spec.data_type == "datetime":
+                return value
+            scale_factor = getattr(spec, "scale_factor", 1.0)
+            return self._apply_scale_factor(value, scale_factor)
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            PulsarProtocolError,
+            PulsarFrameError,
+        ):
+            return None
+
+    def _parse_response(
+        self, response_payload: bytes, data_type: str
+    ) -> int | float | str | datetime.datetime | None:
+        """Parse response payload based on data type.
+
+        Args:
+            response_payload: Response payload bytes.
+            data_type: Data type identifier.
+
+        Returns:
+            Parsed value or None if type is unsupported.
+
+        """
+        if data_type == "int32":
+            value = self.read_int_from_hex(response_payload, 4, 0, False)
+            return self._convert_to_signed(value, 32)
+        if data_type == "float32":
+            return self.read_float_from_hex(response_payload, 4, 0, False)
+        if data_type == "uint32":
+            return self.read_int_from_hex(response_payload, 4, 0, False)
+        if data_type == "uint64":
+            return self.read_int_from_hex(response_payload, 8, 0, False)
+        if data_type == "uint8":
+            return response_payload[0]
+        if data_type == "int8":
+            value = response_payload[0]
+            return self._convert_to_signed(value, 8)
+        if data_type == "uint16":
+            return self.read_int_from_hex(response_payload, 2, 0, False)
+        if data_type == "string":
+            return response_payload.decode("ascii", errors="ignore").rstrip("\x00")
+        if data_type == "datetime":
+            return self._parse_datetime(response_payload)
         return None
+
+    def _parse_datetime(self, response_payload: bytes) -> datetime.datetime:
+        """Parse datetime from response payload.
+
+        Args:
+            response_payload: 6 bytes representing datetime (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND).
+
+        Returns:
+            Datetime object (timezone-naive, as device doesn't specify timezone).
+
+        """
+        year, month, day, hour, minute, seconds = struct.unpack("6B", response_payload)
+        return datetime.datetime(  # noqa: DTZ001
+            2000 + year,
+            month,
+            day,
+            hour,
+            minute,
+            seconds,
+        )
+
+    def _convert_to_signed(self, value: int, bit_width: int) -> int:
+        """Convert unsigned integer to signed.
+
+        Args:
+            value: Unsigned integer value.
+            bit_width: Bit width (8, 16, 32, etc.).
+
+        Returns:
+            Signed integer value.
+
+        """
+        sign_bit = 1 << (bit_width - 1)
+        if value & sign_bit:
+            return value - (1 << bit_width)
+        return value
+
+    def _apply_scale_factor(
+        self, value: int | float | str | None, scale_factor: float
+    ) -> int | float | str | None:
+        """Apply scale factor to numeric value.
+
+        Args:
+            value: Parsed value from device.
+            scale_factor: Scale factor to apply.
+
+        Returns:
+            Scaled value or original value if scaling not applicable.
+
+        """
+        if (
+            value is not None
+            and scale_factor != 1.0
+            and isinstance(value, (int, float))
+        ):
+            return value * scale_factor
+        return value
