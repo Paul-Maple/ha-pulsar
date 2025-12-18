@@ -123,6 +123,9 @@
       "volume_forward": {
         "name": "Forward volume"
       },
+      "volume_reverse": {
+        "name": "Reverse volume"
+      },
       "volume_supply": {
         "name": "Supply volume"
       },
@@ -227,6 +230,7 @@
         "water_type_d": "Water: Two-Tariff",
         "water_type_e": "Water: Electronic Gen1",
         "water_type_f": "Water: Electronic Gen2",
+        "water_type_g": "Water: Ultrasonic",
         "heat_meter": "Heat Meter"
       }
     }

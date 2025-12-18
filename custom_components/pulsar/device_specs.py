@@ -36,6 +36,7 @@ class DeviceType(enum.StrEnum):
     WATER_TYPE_D = "water_type_d"
     WATER_TYPE_E = "water_type_e"
     WATER_TYPE_F = "water_type_f"
+    WATER_TYPE_G = "water_type_g"
     HEAT_METER = "heat_meter"
 
 
@@ -449,6 +450,31 @@ WATER_TYPE_F_METADATA = DeviceTypeMetadata(
     property_parser=parse_firmware_info,
 )
 
+WATER_TYPE_G_METADATA = DeviceTypeMetadata(
+    type_id=DeviceType.WATER_TYPE_G,
+    model_name="Water: Ultrasonic",
+    data_specs=(
+        volume_spec(0x01, "volume", "float32", scale_factor=1000.0),
+        volume_spec(0x02, "volume_reverse", "float32", scale_factor=1000.0),
+        flow_rate_spec(0x0100, FUNCTION_READ_PARAMETERS, scale_factor=1000.0),
+        battery_voltage_spec(0x0040),
+        duration_spec(0x000A, "operating_time"),
+        diagnostic_spec(0x08, "error_flags", "uint32", FUNCTION_READ_CHANNELS),
+        diagnostic_spec(
+            0x0402,
+            "last_rssi",
+            "int8",
+            FUNCTION_READ_PARAMETERS,
+            unit=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        ),
+        diagnostic_spec(
+            0x0000, "device_date_time", "datetime", FUNCTION_READ_SYSTEM_TIME
+        ),
+    ),
+    property_specs=(device_property_spec(0x0002, "firmware_info", "uint64"),),
+    property_parser=parse_firmware_info,
+)
+
 HEAT_METER_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.HEAT_METER,
     model_name="Heat Meter",
@@ -480,5 +506,6 @@ DEVICE_TYPE_REGISTRY: dict[str, DeviceTypeMetadata] = {
     DeviceType.WATER_TYPE_D: WATER_TYPE_D_METADATA,
     DeviceType.WATER_TYPE_E: WATER_TYPE_E_METADATA,
     DeviceType.WATER_TYPE_F: WATER_TYPE_F_METADATA,
+    DeviceType.WATER_TYPE_G: WATER_TYPE_G_METADATA,
     DeviceType.HEAT_METER: HEAT_METER_METADATA,
 }
