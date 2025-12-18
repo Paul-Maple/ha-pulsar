@@ -80,18 +80,20 @@ water_meter_type_d:
     revision: 2
     modification: 1
 
-# Water Meter Type E: Electronic Gen 1 (Float32, channel 2 flow rate)
+# Water Meter Type E: Ultrasonic (Float32, reverse volume, parameter-based flow rate)
 water_meter_type_e:
   port: 9605
   address: 12345678
   device_id: 439
   channels:
-    volume_forward: 1234.567 # m³ (Channel 1, Float32)
-    flow_rate: 0.5 # m³/h (Channel 2, Float32)
+    volume: 1234.567 # m³ (Channel 1, Float32)
+    volume_reverse: 12.345 # m³ (Channel 2, Float32)
+    error_flags: 0 # UINT32 (Channel 8, bit 3)
   parameters:
-    battery_voltage: 3600 # mV (UINT16)
-    error_flags: 0 # UINT16 (Parameter 0x0010)
-    rssi: -70 # dBm (INT8, Parameter 0x0206)
+    flow_rate: 0.5 # m³/h (Parameter 0x0100, Float32)
+    battery_voltage: 3600 # mV (Parameter 0x0040, UINT16)
+    operating_time: 8760 # hours (Parameter 0x000A, UINT32)
+    last_rssi: -70 # dBm (Parameter 0x0402, INT8)
   firmware:
     fw_number: 150
     hw_version: 11
@@ -120,7 +122,7 @@ water_meter_type_f:
     revision: 2
     modification: 1
 
-# Heat Meter
+# Heat Meter (Apartment - Type A)
 heat_meter:
   port: 9607
   address: 87654321
@@ -131,8 +133,9 @@ heat_meter:
     temp_supply: 75.5 # °C
     temp_return: 45.2 # °C
     energy_heat: 123.45 # Gcal
-    energy_cooling: 0.0 # Gcal
-    operation_time: 8760 # hours
+    energy_cooling: 10.0 # Gcal
+    operating_time: 8760 # hours
+    error_flags: 0 # UINT32
     pulse_input_1: 10.0 # m³
     pulse_input_2: 20.0 # m³
     pulse_input_3: 30.0 # m³
@@ -140,9 +143,12 @@ heat_meter:
     pressure_supply: 0.5 # MPa
     pressure_return: 0.4 # MPa
   parameters:
-    factory_number: "HM123456"
     battery_voltage: 3700 # mV
-    pulse_in_1_weight: 0.1 # m³/imp
+    flow_rate: 0.5 # m³/h
+    temp_diff: 30.3 # °C
+    environment_temp: 20 # °C (int8)
+    power_heat: 0.5 # Gcal/h
+    last_rssi: -70 # dBm (int8)
   firmware:
     fw_number: 150
     hw_version: 11

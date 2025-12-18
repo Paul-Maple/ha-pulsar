@@ -144,6 +144,9 @@
       "temp_return": {
         "name": "Return temperature"
       },
+      "temp_diff": {
+        "name": "Temperature difference"
+      },
       "environment_temp": {
         "name": "Environment temperature"
       },
@@ -164,6 +167,9 @@
       },
       "flow_threshold_max": {
         "name": "Flow threshold maximum"
+      },
+      "power_heat": {
+        "name": "Heat power"
       },
       "energy_heat": {
         "name": "Heat energy"
@@ -225,13 +231,13 @@
     "device_type": {
       "options": {
         "water_type_a": "Water: Pulse Module (IoT/Mini)",
-        "water_type_b": "Water: Mechanical (Pulsar-M)",
+        "water_type_b": "Water: Mechanical",
         "water_type_c": "Water: RS485",
         "water_type_d": "Water: Two-Tariff",
-        "water_type_e": "Water: Electronic Gen1",
-        "water_type_f": "Water: Electronic Gen2",
-        "water_type_g": "Water: Ultrasonic",
-        "heat_meter": "Heat Meter"
+        "water_type_e": "Water: Ultrasonic",
+        "water_type_f": "Water: Electronic",
+        "heat_type_a": "Heat Meter (Apartment)",
+        "heat_type_b": "Heat Meter (Compact/Ultrasonic)"
       }
     }
   }

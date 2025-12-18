@@ -1,6 +1,6 @@
-"""Pulsar Water Meter Type E Emulator - Electronic Meters (Gen 1).
+"""Pulsar Water Meter Type E Emulator - Ultrasonic Meters.
 
-Returns Float32 volume and flow rate values with parameter-based diagnostics.
+Returns Float32 volume values with reverse volume support and parameter-based diagnostics.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from config_loader import load_config, get_device_config
 
 
 class WaterMeterTypeEEmulator(BaseEmulator):
-    """Type E: Electronic Gen 1 emulator (Float32 format, channel 2 flow rate)."""
+    """Type E: Ultrasonic Meters emulator (Float32 format, reverse volume support)."""
 
     def __init__(self, port: int | None = None, config_path: str | None = None):
         """Initialize Type E water meter emulator.
@@ -32,14 +32,20 @@ class WaterMeterTypeEEmulator(BaseEmulator):
 
         # Channel data (Float32)
         channels = device_config["channels"]
-        self.channel_1_volume_forward = channels["volume_forward"]
-        self.channel_2_flow_rate = channels["flow_rate"]
+        self.channel_1_volume = channels["volume"]
+        self.channel_2_volume_reverse = channels["volume_reverse"]
+        self.channel_8_error_flags = channels.get("error_flags", 0)  # UINT32
 
         # Parameters
         params = device_config["parameters"]
-        self.battery_voltage = params["battery_voltage"]  # mV (UINT16)
-        self.error_flags = params["error_flags"]  # UINT16
-        self.rssi = params.get("rssi", -70)  # INT8, dBm
+        self.flow_rate = params["flow_rate"]  # m³/h (Float32, Parameter 0x0100)
+        self.battery_voltage = params[
+            "battery_voltage"
+        ]  # mV (UINT16, Parameter 0x0040)
+        self.operating_time = params.get(
+            "operating_time", 0
+        )  # hours (UINT32, Parameter 0x000A)
+        self.last_rssi = params.get("last_rssi", -70)  # dBm (INT8, Parameter 0x0402)
 
         # Firmware version
         fw = device_config["firmware"]
@@ -58,7 +64,10 @@ class WaterMeterTypeEEmulator(BaseEmulator):
     def get_channel_data(self, channel_mask: int) -> bytes | None:
         """Get channel data for Type E water meter.
 
-        Type E has Channel 1 (Volume Forward) and Channel 2 (Flow Rate) as Float32.
+        Type E has:
+        - Channel 1 (0x01): Volume Forward (Float32)
+        - Channel 2 (0x02): Volume Reverse (Float32)
+        - Channel 8 (0x08): Error Flags (UINT32)
 
         Args:
             channel_mask: Bitmask of channels to read.
@@ -73,14 +82,18 @@ class WaterMeterTypeEEmulator(BaseEmulator):
 
         # Channel 1: Volume Forward (Float32)
         if channel_mask & 0x01:
-            channel_data.extend(self.encode_float32(self.channel_1_volume_forward))
+            channel_data.extend(self.encode_float32(self.channel_1_volume))
 
-        # Channel 2: Flow Rate (Float32)
+        # Channel 2: Volume Reverse (Float32)
         if channel_mask & 0x02:
-            channel_data.extend(self.encode_float32(self.channel_2_flow_rate))
+            channel_data.extend(self.encode_float32(self.channel_2_volume_reverse))
+
+        # Channel 8: Error Flags (UINT32, bit 3)
+        if channel_mask & 0x08:
+            channel_data.extend(self.encode_uint(self.channel_8_error_flags, 4))
 
         # Reject if requesting other channels
-        if channel_mask & ~0x03:  # Only bits 0 and 1 are valid (0x01, 0x02)
+        if channel_mask & ~0x0B:  # Only bits 0, 1, and 3 are valid (0x01, 0x02, 0x08)
             return None
 
         return bytes(channel_data) if len(channel_data) > 0 else None
@@ -112,19 +125,23 @@ class WaterMeterTypeEEmulator(BaseEmulator):
             result[6] = self.revision
             result[7] = self.modification
 
+        elif param_index == 0x000A:
+            # Operating Time (UINT32, hours)
+            result[0:4] = self.encode_uint(self.operating_time, 4)
+
         elif param_index == 0x0040:
             # Battery Voltage (UINT16, mV)
             result[0:2] = self.encode_uint(self.battery_voltage, 2)
 
-        elif param_index == 0x0010:
-            # Error Flags (UINT16, bitmask)
-            result[0:2] = self.encode_uint(self.error_flags, 2)
+        elif param_index == 0x0100:
+            # Flow Rate (Float32, m³/h)
+            result[0:4] = self.encode_float32(self.flow_rate)
 
-        elif param_index == 0x0206:
-            # RSSI (INT8, dBm)
-            rssi_byte = self.rssi & 0xFF
-            if self.rssi < 0:
-                rssi_byte = (self.rssi + 256) & 0xFF
+        elif param_index == 0x0402:
+            # Last RSSI (INT8, dBm)
+            rssi_byte = self.last_rssi & 0xFF
+            if self.last_rssi < 0:
+                rssi_byte = (self.last_rssi + 256) & 0xFF
             result[0] = rssi_byte
 
         else:
@@ -162,9 +179,9 @@ class WaterMeterTypeEEmulator(BaseEmulator):
 
         # Determine base value
         base_value = (
-            self.channel_1_volume_forward
+            self.channel_1_volume
             if channel_mask == 0x01
-            else self.channel_2_flow_rate
+            else self.channel_2_volume_reverse
         )
 
         response = bytearray()
@@ -176,14 +193,14 @@ class WaterMeterTypeEEmulator(BaseEmulator):
             num_records = min(
                 24, int((date_end - date_start).total_seconds() / 3600) + 1
             )
-            increment = 0.5 if channel_mask == 0x01 else 0.1
+            increment = 0.5 if channel_mask == 0x01 else 0.05
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
 
         elif archive_type == 2:
             num_records = min(7, (date_end - date_start).days + 1)
-            increment = 12.0 if channel_mask == 0x01 else 2.0
+            increment = 12.0 if channel_mask == 0x01 else 1.2
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
@@ -198,7 +215,7 @@ class WaterMeterTypeEEmulator(BaseEmulator):
                 )
                 + 1,
             )
-            increment = 360.0 if channel_mask == 0x01 else 60.0
+            increment = 360.0 if channel_mask == 0x01 else 36.0
             for i in range(num_records):
                 value = base_value + (i * increment)
                 response.extend(self.encode_float32(value))
@@ -211,7 +228,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Pulsar Water Meter Type E Emulator (Electronic Gen 1)"
+        description="Pulsar Water Meter Type E Emulator (Ultrasonic)"
     )
     parser.add_argument(
         "--port", type=int, default=9605, help="TCP port to listen on (default: 9605)"

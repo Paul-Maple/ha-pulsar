@@ -5,6 +5,7 @@ Provides static data for testing the Home Assistant integration.
 
 from __future__ import annotations
 
+import struct
 from datetime import datetime
 
 from base_emulator import BaseEmulator
@@ -30,7 +31,7 @@ class HeatMeterEmulator(BaseEmulator):
         self.device_address = device_config["address"]
         self.port = port if port is not None else device_config["port"]
 
-        # Channel data (FLOAT32 except Ch7 which is UINT32)
+        # Channel data (FLOAT32 except Ch7 which is UINT32, Ch8 is UINT32)
         channels = device_config["channels"]
         self.channel_1_volume_supply = channels["volume_supply"]
         self.channel_2_volume_return = channels["volume_return"]
@@ -38,19 +39,25 @@ class HeatMeterEmulator(BaseEmulator):
         self.channel_4_temp_return = channels["temp_return"]
         self.channel_5_energy_heat = channels["energy_heat"]
         self.channel_6_energy_cooling = channels["energy_cooling"]
-        self.channel_7_operation_time = channels["operation_time"]  # UINT32
-        self.channel_8_pulse_input_1 = channels["pulse_input_1"]
-        self.channel_9_pulse_input_2 = channels["pulse_input_2"]
-        self.channel_10_pulse_input_3 = channels["pulse_input_3"]
-        self.channel_11_pulse_input_4 = channels["pulse_input_4"]
-        self.channel_12_pressure_supply = channels["pressure_supply"]
-        self.channel_13_pressure_return = channels["pressure_return"]
+        self.channel_7_operation_time = channels["operating_time"]  # UINT32
+        self.channel_8_error_flags = channels.get("error_flags", 0x0000)  # UINT32
+        self.channel_9_pulse_input_1 = channels["pulse_input_1"]
+        self.channel_10_pulse_input_2 = channels["pulse_input_2"]
+        self.channel_11_pulse_input_3 = channels["pulse_input_3"]
+        self.channel_12_pulse_input_4 = channels["pulse_input_4"]
+        self.channel_13_pressure_supply = channels["pressure_supply"]
+        self.channel_14_pressure_return = channels["pressure_return"]
 
         # Parameters
         params = device_config["parameters"]
-        self.factory_number = params["factory_number"]  # 8 bytes ASCII
+        self.factory_number = params.get("factory_number", "HM123456")  # 8 bytes ASCII
         self.battery_voltage = params["battery_voltage"]  # mV
-        self.pulse_in_1_weight = params["pulse_in_1_weight"]  # m³/imp
+        self.pulse_in_1_weight = params.get("pulse_in_1_weight", 0.1)  # m³/imp
+        self.flow_rate = params.get("flow_rate", 0.5)  # m³/h
+        self.temp_diff = params.get("temp_diff", 30.3)  # °C
+        self.environment_temp = params.get("environment_temp", 20)  # °C (int8)
+        self.power_heat = params.get("power_heat", 0.5)  # Gcal/h
+        self.last_rssi = params.get("last_rssi", -70)  # dBm (int8)
 
         # Firmware version
         fw = device_config["firmware"]
@@ -61,7 +68,6 @@ class HeatMeterEmulator(BaseEmulator):
         self.modification = fw["modification"]
 
         # Default values for parameters not in config
-        self.current_errors = 0x0000  # No errors
         self.operating_time = self.channel_7_operation_time  # hours
 
         super().__init__(
@@ -95,12 +101,13 @@ class HeatMeterEmulator(BaseEmulator):
             (0x10, self.encode_float32(self.channel_5_energy_heat)),
             (0x20, self.encode_float32(self.channel_6_energy_cooling)),
             (0x40, self.encode_uint(self.channel_7_operation_time, 4)),  # UINT32
-            (0x80, self.encode_float32(self.channel_8_pulse_input_1)),
-            (0x100, self.encode_float32(self.channel_9_pulse_input_2)),
-            (0x200, self.encode_float32(self.channel_10_pulse_input_3)),
-            (0x400, self.encode_float32(self.channel_11_pulse_input_4)),
-            (0x800, self.encode_float32(self.channel_12_pressure_supply)),
-            (0x1000, self.encode_float32(self.channel_13_pressure_return)),
+            (0x80, self.encode_uint(self.channel_8_error_flags, 4)),  # UINT32
+            (0x100, self.encode_float32(self.channel_9_pulse_input_1)),
+            (0x200, self.encode_float32(self.channel_10_pulse_input_2)),
+            (0x400, self.encode_float32(self.channel_11_pulse_input_3)),
+            (0x800, self.encode_float32(self.channel_12_pulse_input_4)),
+            (0x1000, self.encode_float32(self.channel_13_pressure_supply)),
+            (0x2000, self.encode_float32(self.channel_14_pressure_return)),
         ]
 
         # Add requested channels in order
@@ -108,8 +115,8 @@ class HeatMeterEmulator(BaseEmulator):
             if channel_mask & mask_bit:
                 channel_data.extend(data)
 
-        # Reject if requesting non-existent channels (bits 14-31)
-        if channel_mask & ~0x1FFF:
+        # Reject if requesting non-existent channels (bits 14-31, except valid ones)
+        if channel_mask & ~0x3FFF:
             return None
 
         return bytes(channel_data) if len(channel_data) > 0 else None
@@ -151,9 +158,25 @@ class HeatMeterEmulator(BaseEmulator):
             factory_bytes = self.factory_number.encode("ascii")
             result[0 : len(factory_bytes)] = factory_bytes
 
-        elif param_index == 0x0007:
-            # Current Errors (UINT32)
-            result[0:4] = self.encode_uint(self.current_errors, 4)
+        elif param_index == 0x0100:
+            # Flow Rate (FLOAT32) - m³/h
+            result[0:4] = self.encode_float32(self.flow_rate)
+
+        elif param_index == 0x0130:
+            # Temperature Difference (FLOAT32) - °C
+            result[0:4] = self.encode_float32(self.temp_diff)
+
+        elif param_index == 0x0131:
+            # Environment Temperature (INT8) - °C
+            result[0] = struct.pack("b", self.environment_temp)[0]
+
+        elif param_index == 0x0170:
+            # Power Heat (FLOAT32) - Gcal/h
+            result[0:4] = self.encode_float32(self.power_heat)
+
+        elif param_index == 0x0402:
+            # Last RSSI (INT8) - dBm
+            result[0] = struct.pack("b", self.last_rssi)[0]
 
         elif param_index == 0x0012:
             # Operating Time (UINT32)
@@ -178,10 +201,6 @@ class HeatMeterEmulator(BaseEmulator):
         elif param_index == 0x000D:
             # Pulse In 1 Initial (FLOAT32)
             result[0:4] = self.encode_float32(0.0)
-
-        elif param_index == 0x0100:
-            # Radio Mode (UINT8)
-            result[0] = 0x00
 
         elif param_index == 0x1100:
             # LoRa Device EUI (8 bytes)
@@ -246,12 +265,12 @@ class HeatMeterEmulator(BaseEmulator):
             4: self.channel_4_temp_return,
             5: self.channel_5_energy_heat,
             6: self.channel_6_energy_cooling,
-            8: self.channel_8_pulse_input_1,
-            9: self.channel_9_pulse_input_2,
-            10: self.channel_10_pulse_input_3,
-            11: self.channel_11_pulse_input_4,
-            12: self.channel_12_pressure_supply,
-            13: self.channel_13_pressure_return,
+            9: self.channel_9_pulse_input_1,
+            10: self.channel_10_pulse_input_2,
+            11: self.channel_11_pulse_input_3,
+            12: self.channel_12_pulse_input_4,
+            13: self.channel_13_pressure_supply,
+            14: self.channel_14_pressure_return,
         }
 
         # Generate archive records based on type
