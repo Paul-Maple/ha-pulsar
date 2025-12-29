@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import logging
+import math
 import struct
 
 from .connector import Connector
@@ -24,6 +26,8 @@ from .exceptions import (
     PulsarProtocolError,
     PulsarRequestIdError,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PulsarDevice:
@@ -432,6 +436,13 @@ class PulsarDevice:
             value = self._parse_response(response_payload, spec.data_type)
             if spec.data_type == "datetime":
                 return value
+            if isinstance(value, float) and not math.isfinite(value):
+                _LOGGER.debug(
+                    "Sensor %s returned non-finite value (NaN/Inf), treating as unavailable",
+                    spec.key,
+                )
+                return None
+
             scale_factor = getattr(spec, "scale_factor", 1.0)
             return self._apply_scale_factor(value, scale_factor)
         except (
@@ -440,7 +451,15 @@ class PulsarDevice:
             OSError,
             PulsarProtocolError,
             PulsarFrameError,
-        ):
+        ) as err:
+            _LOGGER.warning(
+                "Failed to read %s (addr: 0x%04X, func: 0x%02X) from device %s: %s",
+                spec.key,
+                spec.address,
+                spec.function_code,
+                self._serial_number,
+                err,
+            )
             return None
 
     def _parse_response(

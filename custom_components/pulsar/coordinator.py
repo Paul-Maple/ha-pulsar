@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import Any
 
@@ -18,14 +19,18 @@ class PulsarDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator to fetch data from Pulsar device."""
 
     def __init__(
-        self, hass: HomeAssistant, device: PulsarDevice, device_id: str
+        self,
+        hass: HomeAssistant,
+        device: PulsarDevice,
+        device_id: str,
+        scan_interval: timedelta = DEFAULT_SCAN_INTERVAL,
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=f"Pulsar {device.name}",
-            update_interval=DEFAULT_SCAN_INTERVAL,
+            update_interval=scan_interval,
         )
         self.device = device
         self._device_id = device_id

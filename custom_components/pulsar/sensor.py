@@ -82,7 +82,11 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
     @property
     def available(self) -> bool:  # type: ignore[override]
         """Return if entity is available."""
-        return self.coordinator.last_update_success
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data is not None
+            and self.entity_description.key in self.coordinator.data
+        )
 
     @property
     def native_value(self) -> StateType:  # type: ignore[override]
