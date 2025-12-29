@@ -2,7 +2,7 @@
   "config": {
     "abort": {
       "address_already_configured": "Device with this address is already configured",
-      "name_already_exists": "Device with this name is already exists"
+      "name_already_exists": "Device with this name already exists"
     },
     "error": {
       "cannot_connect": "Failed to connect"
@@ -18,7 +18,8 @@
       },
       "manual_port_config": {
         "data": {
-          "device_or_address": "Serial device path or IP address"
+          "device_or_address": "Serial device path or IP address",
+          "scan_interval": "Scan interval (seconds)"
         },
         "description": "Enter the serial port settings",
         "title": "Serial Port Settings"
@@ -46,7 +47,7 @@
     "flow_title": "{name}",
     "abort": {
       "address_already_configured": "Device with this address is already configured",
-      "name_already_exists": "Device with this name is already exists"
+      "name_already_exists": "Device with this name already exists"
     },
     "step": {
       "yaml_import": {
@@ -54,24 +55,26 @@
         "description": "Options cannot be edited when configured via YAML."
       },
       "configure_menu": {
-        "title": "Pulse Configuration",
-        "description": "Please select the desired action.",
+        "title": "Configuration",
+        "description": "Please select the desired action",
         "menu_options": {
-          "configure_device": "Add a new device",
-          "edit_device": "Edit a device",
-          "change_port": "Change port settings"
+          "configure_device": "Add device",
+          "edit_device": "Edit device",
+          "change_port": "Change port settings",
+          "scan_interval": "Scan interval"
         }
       },
       "choose_serial_port": {
         "data": {
           "device_or_address": "Serial Device Path"
         },
-        "description": "Select the serial port for your Zigbee radio",
+        "description": "Select the serial port for your meters",
         "title": "Select a Serial Port"
       },
       "manual_port_config": {
         "data": {
-          "device_or_address": "Serial device path or IP address"
+          "device_or_address": "Serial device path or IP address",
+          "scan_interval": "Scan interval (seconds)"
         },
         "description": "Enter the serial port settings",
         "title": "Serial Port Settings"
@@ -86,15 +89,22 @@
         "title": "Add device"
       },
       "edit_device": {
-        "title": "Edit a new device",
-        "description": "Pick the configured device you wish to edit.",
+        "title": "Edit device",
+        "description": "Pick the configured device you wish to edit",
         "data": {
-          "selected_device": "Configured Devices"
+          "selected_device": "Device to edit"
         }
       },
       "change_port": {
-        "title": "Edit port settings",
-        "description": "You can change port settings."
+        "title": "Change port settings",
+        "description": "You can change port settings"
+      },
+      "scan_interval": {
+        "title": "Scan Interval",
+        "description": "Configure the scan interval for device updates",
+        "data": {
+          "scan_interval": "Scan interval (seconds)"
+        }
       },
       "add_menu": {
         "menu_options": {

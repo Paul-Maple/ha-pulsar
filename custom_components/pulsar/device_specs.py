@@ -228,25 +228,6 @@ def energy_sensor(
     )
 
 
-def energy_sensor_kwh(
-    address: int,
-    key: str,
-) -> DataSpec:
-    """Create an energy DataSpec in kWh for Energy Dashboard compatibility."""
-    return DataSpec(
-        address=address,
-        function_code=FUNCTION_READ_CHANNELS,
-        key=key,
-        data_type="float32",
-        unit=UnitOfEnergy.KILO_WATT_HOUR,
-        translation_key=key,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        scale_factor=1163.0,
-        display_precision=1,
-    )
-
-
 def pressure_sensor(
     address: int,
     key: str,
@@ -372,7 +353,7 @@ WATER_TYPE_A_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_A,
     model_name="Water: Pulse Module (IoT/Mini)",
     data_specs=(
-        volume_sensor(0x01, "volume", "int32", UnitOfVolume.LITERS),
+        volume_sensor(0x01, "volume", "int32"),
         battery_voltage_sensor(0x0041),
         temperature_sensor(0x0040, "temperature", "int8"),
         diagnostic_sensor(0x0007, "error_flags", "uint16"),
@@ -389,7 +370,7 @@ WATER_TYPE_B_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_B,
     model_name="Water: Mechanical",
     data_specs=(
-        volume_sensor(0x01, "volume", "int32", UnitOfVolume.LITERS),
+        volume_sensor(0x01, "volume", "int32"),
         battery_voltage_sensor(0x000A, "float32", 1.0),
         temperature_sensor(0x000B, "device_temperature", "float32"),
         diagnostic_sensor(0x0006, "error_flags", "uint8"),
@@ -495,9 +476,7 @@ HEAT_TYPE_A_METADATA = DeviceTypeMetadata(
         temperature_sensor(0x04, "temp_supply", "float32", FUNCTION_READ_CHANNELS),
         temperature_sensor(0x08, "temp_return", "float32", FUNCTION_READ_CHANNELS),
         energy_sensor(0x10, "energy_heat"),
-        energy_sensor_kwh(0x10, "energy_heat_kwh"),
         energy_sensor(0x20, "energy_cooling"),
-        energy_sensor_kwh(0x20, "energy_cooling_kwh"),
         duration_sensor(0x40, "operating_time", FUNCTION_READ_CHANNELS),
         diagnostic_sensor(0x80, "error_flags", "uint32", FUNCTION_READ_CHANNELS),
         volume_sensor(0x100, "pulse_input_1", "float32", scale_factor=1000.0),
@@ -539,9 +518,7 @@ HEAT_TYPE_B_METADATA = DeviceTypeMetadata(
         temperature_sensor(0x10, "temp_diff", "float32", FUNCTION_READ_CHANNELS),
         power_sensor(0x20, "power_heat", scale_factor=1163.0),
         energy_sensor(0x40, "energy_heat"),
-        energy_sensor_kwh(0x40, "energy_heat_kwh"),
         energy_sensor(0x100000, "energy_cooling"),
-        energy_sensor_kwh(0x100000, "energy_cooling_kwh"),
         volume_sensor(0x80, "volume", "float32", scale_factor=1000.0),
         flow_rate_sensor(0x100, FUNCTION_READ_CHANNELS, scale_factor=1000.0),
         volume_sensor(0x200, "pulse_input_1", "float32", scale_factor=1000.0),

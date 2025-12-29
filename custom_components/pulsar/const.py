@@ -24,6 +24,7 @@ CONF_DEVICE_OR_ADDRESS = "device_or_address"
 CONF_ID = "id"
 CONF_MANUAL_PATH = "Enter Manually"
 CONF_NAME = "name"
+CONF_SCAN_INTERVAL = "scan_interval"
 CONF_SERIAL_ID = "serial_id"
 CONF_TYPE = "type"
 
@@ -35,6 +36,7 @@ STEP_CONFIGURE_DEVICE = "configure_device"
 STEP_CONFIGURE_MENU = "configure_menu"
 STEP_CHOOSE_SERIAL_PORT = "choose_serial_port"
 STEP_MANUAL_PORT_CONFIG = "manual_port_config"
+STEP_SCAN_INTERVAL = "scan_interval"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
 

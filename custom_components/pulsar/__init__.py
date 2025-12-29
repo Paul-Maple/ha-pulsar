@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,7 +13,14 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 import homeassistant.helpers.entity_registry as er
 
-from .const import CONF_DEVICE_CONFIG, DOMAIN, MANUFACTURER, PLATFORMS
+from .const import (
+    CONF_DEVICE_CONFIG,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MANUFACTURER,
+    PLATFORMS,
+)
 from .coordinator import PulsarDataUpdateCoordinator
 from .pulsar_manager import PulsarManager
 
@@ -44,12 +52,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bo
     except Exception as err:
         raise ConfigEntryNotReady(f"Unable to connect to serial device: {err}") from err
 
-    # Create coordinator for each device
+    scan_interval_seconds = entry.options.get(
+        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.total_seconds()
+    )
+    scan_interval = timedelta(seconds=scan_interval_seconds)
+
     coordinators: dict[str, PulsarDataUpdateCoordinator] = {}
     devices = device_manager.get_devices(None)
 
     for device_id, device in devices.items():
-        coordinator = PulsarDataUpdateCoordinator(hass, device, device_id)
+        coordinator = PulsarDataUpdateCoordinator(
+            hass, device, device_id, scan_interval=scan_interval
+        )
         await coordinator.async_config_entry_first_refresh()
         coordinators[device_id] = coordinator
 

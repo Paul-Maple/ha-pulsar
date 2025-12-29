@@ -68,3 +68,4 @@ def get_archive_config(config: dict[str, Any]) -> dict[str, Any]:
         "monthly_records": 3,
     })
 
+
