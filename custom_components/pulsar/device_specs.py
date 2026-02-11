@@ -456,7 +456,7 @@ WATER_TYPE_E_METADATA = DeviceTypeMetadata(
 
 HEAT_TYPE_A_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.HEAT_TYPE_A,
-    model_name="Теплосчётчик (Тип 1)",
+    model_name="Теплосчётчик квартирный",
     data_specs=(
         volume_sensor(0x01, "volume_supply", "float32", scale_factor=1000.0),
         volume_sensor(0x02, "volume_return", "float32", scale_factor=1000.0),
@@ -494,7 +494,7 @@ HEAT_TYPE_A_METADATA = DeviceTypeMetadata(
 
 HEAT_TYPE_B_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.HEAT_TYPE_B,
-    model_name="Теплосчётчик (Тип 2)",
+    model_name="Теплосчётчик квартирный (Legacy)",
     data_specs=(
         temperature_sensor(0x04, "temp_supply", "float32", FUNCTION_READ_CHANNELS),
         temperature_sensor(0x08, "temp_return", "float32", FUNCTION_READ_CHANNELS),
