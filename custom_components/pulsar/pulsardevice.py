@@ -223,7 +223,12 @@ class PulsarDevice:
         expected_response_size = response_size
 
         response = self._connector.send(message, response_size)
-
+        # Сначала проверяем, не является ли ответ ошибкой (функция 0x00)
+        if len(response) >= 5 and response[4] == 0x00:
+            # Это ответ с ошибкой - возвращаем как есть
+            return response
+    
+        # Если не ошибка, проверяем как обычно
         self.check_response(response, expected_response_size, addr, request_id)
 
         return response
@@ -255,6 +260,24 @@ class PulsarDevice:
         """
         request = self.prepare_request(payload, function, addr, request_id)
         response = self.send_request(request, expected_payload_size + SERVICE_SIZE)
+        
+        # Проверяем, не является ли ответ ошибкой (функция 0x00)
+        if len(response) >= 5 and response[4] == 0x00:
+            # Это ответ с ошибкой
+            error_code = response[6] if len(response) > 6 else 0
+            error_messages = {
+                0x01: "Function code not supported",
+                0x02: "Invalid channel mask",
+                0x03: "Invalid length",
+                0x04: "Parameter missing",
+                0x05: "Write locked / Auth required",
+                0x06: "Value out of range",
+                0x07: "Archive type not supported",
+                0x08: "Max archive entries exceeded",
+            }
+            error_msg = error_messages.get(error_code, f"Unknown error code: 0x{error_code:02X}")
+            raise PulsarProtocolError(f"Device returned error: {error_msg}")
+        
         start_ind = ADDR_SIZE + FUNC_SIZE + LEN_SIZE
         end_ind = 0 - ID_SIZE - CRC_SIZE
         return response[start_ind:end_ind]
@@ -433,37 +456,62 @@ class PulsarDevice:
                 self.next_request_id(),
                 spec.response_size,
             )
-            value = self._parse_response(response_payload, spec.data_type)
+            value = self._parse_response(response_payload, spec.data_type, spec)
             if spec.data_type == "datetime":
                 return value
             if isinstance(value, float) and not math.isfinite(value):
-                _LOGGER.debug(
-                    "Sensor %s returned non-finite value (NaN/Inf), treating as unavailable",
+                _LOGGER.warning(
+                    "Device %s (%s) sensor %s returned non-finite value (NaN/Inf), treating as unavailable",
+                    self._name,
+                    self._metadata.model_name,
                     spec.key,
                 )
                 return None
 
             scale_factor = getattr(spec, "scale_factor", 1.0)
             return self._apply_scale_factor(value, scale_factor)
+        except PulsarProtocolError as err:
+            # Определяем тип данных для более точного логирования
+            # Проверяем функцию, чтобы определить тип (канал или параметр)
+            if spec.function_code == 0x01:  # FUNCTION_READ_CHANNELS
+                data_type = "channel"
+            else:
+                data_type = "parameter"
+            _LOGGER.warning(
+                "Device %s (%s) returned error for %s %s (0x%04X): %s",
+                self._name,
+                self._metadata.model_name,
+                data_type,
+                spec.key,
+                spec.address,
+                err,
+            )
+            return None
         except (
             ConnectionError,
             TimeoutError,
             OSError,
-            PulsarProtocolError,
             PulsarFrameError,
         ) as err:
+            # Определяем тип данных для более точного логирования
+            if spec.function_code == 0x01:  # FUNCTION_READ_CHANNELS
+                data_type = "channel"
+            else:
+                data_type = "parameter"
             _LOGGER.warning(
-                "Failed to read %s (addr: 0x%04X, func: 0x%02X) from device %s: %s",
+                "Device %s (%s) failed to read %s %s (addr: 0x%04X, func: 0x%02X): %s",
+                self._name,
+                self._metadata.model_name,
+                data_type,
                 spec.key,
                 spec.address,
                 spec.function_code,
-                self._serial_number,
                 err,
             )
             return None
 
     def _parse_response(
-        self, response_payload: bytes, data_type: str
+        self, response_payload: bytes, data_type: str, spec: DataSpec | DevicePropertySpec
     ) -> int | float | str | datetime.datetime | None:
         """Parse response payload based on data type.
 
@@ -473,13 +521,43 @@ class PulsarDevice:
 
         Returns:
             Parsed value or None if type is unsupported.
-
+            
+        Note:
+            For float32, special values like -999.0 (0x00C079C4) and 999.0 (0x4479C000)
+            are treated as "unavailable" and return None.
         """
+        
+        if data_type == "float32":
+            value = self.read_float_from_hex(response_payload, 4, 0, False)
+            
+            if value is not None:
+                # Проверка специальных значений float, обозначающих недоступность данных (Nan/InF)
+                raw_bytes = response_payload[:4]
+                
+                # Точное побайтное сравнение (со значениями -999.0 и +999.0)
+                is_special = False
+                if len(raw_bytes) >= 4:
+                    if raw_bytes[:4] in (b'\xC4\x79\xC0\x00', b'\x00\xC0\x79\x44'):
+                        is_special = True
+                
+                # Сравнение с учётом погрешности
+                if not is_special and (abs(value + 999.0) < 0.001 or abs(value - 999.0) < 0.001):
+                    is_special = True
+                    
+                if is_special:
+                    _LOGGER.warning(
+                        "Device %s (%s) sensor %s returned special float value %f indicating unavailable data",
+                        self._name,
+                        self._metadata.model_name,
+                        spec.key,
+                        value
+                    )
+                    return None
+            return value
+            
         if data_type == "int32":
             value = self.read_int_from_hex(response_payload, 4, 0, False)
-            return self._convert_to_signed(value, 32)
-        if data_type == "float32":
-            return self.read_float_from_hex(response_payload, 4, 0, False)
+            return self._convert_to_signed(value, 32)    
         if data_type == "uint32":
             return self.read_int_from_hex(response_payload, 4, 0, False)
         if data_type == "uint64":
@@ -496,7 +574,7 @@ class PulsarDevice:
         if data_type == "datetime":
             return self._parse_datetime(response_payload)
         return None
-
+        
     def _parse_datetime(self, response_payload: bytes) -> datetime.datetime:
         """Parse datetime from response payload.
 
