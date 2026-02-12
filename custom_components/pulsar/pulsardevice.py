@@ -523,28 +523,21 @@ class PulsarDevice:
             Parsed value or None if type is unsupported.
             
         Note:
-            For float32, special values like -999.0 (0x00C079C4) and 999.0 (0x4479C000)
+            For float32, special values like -999.0 and 999.0
             are treated as "unavailable" and return None.
         """
         
         if data_type == "float32":
             value = self.read_float_from_hex(response_payload, 4, 0, False)
             
+            # Константа для сравнения с плавающей точкой
+            EPSILON = 1e-3
+            
+            # Проверка специальных значений float, обозначающих недоступность данных
             if value is not None:
-                # Проверка специальных значений float, обозначающих недоступность данных (Nan/InF)
-                raw_bytes = response_payload[:4]
-                
-                # Точное побайтное сравнение со значениями -999.0 и +999.0 (Little-endian)
-                is_special = False
-                if len(raw_bytes) >= 4:
-                    if raw_bytes[:4] in (b'\x00\xC0\x79\xC4', b'\x00\xC0\x79\x44'):
-                        is_special = True
-                
                 # Сравнение с учётом погрешности
-                if not is_special and (abs(value + 999.0) < 0.001 or abs(value - 999.0) < 0.001):
-                    is_special = True
+                if abs(abs(value) - 999.0) < EPSILON:
                     
-                if is_special:
                     _LOGGER.warning(
                         "Device %s (%s) sensor %s returned special float value %f indicating unavailable data",
                         self._name,
