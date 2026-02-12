@@ -534,10 +534,10 @@ class PulsarDevice:
                 # Проверка специальных значений float, обозначающих недоступность данных (Nan/InF)
                 raw_bytes = response_payload[:4]
                 
-                # Точное побайтное сравнение (со значениями -999.0 и +999.0)
+                # Точное побайтное сравнение со значениями -999.0 и +999.0 (Little-endian)
                 is_special = False
                 if len(raw_bytes) >= 4:
-                    if raw_bytes[:4] in (b'\xC4\x79\xC0\x00', b'\x00\xC0\x79\x44'):
+                    if raw_bytes[:4] in (b'\x00\xC0\x79\xC4', b'\x00\xC0\x79\x44'):
                         is_special = True
                 
                 # Сравнение с учётом погрешности
