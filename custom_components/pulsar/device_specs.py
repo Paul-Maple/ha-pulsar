@@ -347,7 +347,7 @@ def diagnostic_sensor(
 
 WATER_TYPE_A_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_A,
-    model_name="Модуль счётчика воды",
+    model_name="Water meter: Pulse Module",
     data_specs=(
         volume_sensor(0x01, "volume", "int32"),
         battery_voltage_sensor(0x0041),
@@ -363,7 +363,7 @@ WATER_TYPE_A_METADATA = DeviceTypeMetadata(
 
 WATER_TYPE_B_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_B,
-    model_name="Водосчётчик ультразвуковой",
+    model_name="Water meter: Ultrasonic",
     data_specs=(
         volume_sensor(0x01, "volume", "float32", scale_factor=1000.0),
         volume_sensor(0x02, "volume_reverse", "float32", scale_factor=1000.0),
@@ -385,7 +385,7 @@ WATER_TYPE_B_METADATA = DeviceTypeMetadata(
 
 WATER_TYPE_C_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_C,
-    model_name="Водосчётчик электронный (Тип 1)",
+    model_name="Water meter: Electronic (Type 1)",
     data_specs=(
         volume_sensor(0x01, "volume", "float32", scale_factor=1000.0),
         flow_rate_sensor(0x02, scale_factor=1000.0),
@@ -415,7 +415,7 @@ WATER_TYPE_C_METADATA = DeviceTypeMetadata(
 
 WATER_TYPE_D_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_D,
-    model_name="Водосчётчик электронный (Тип 2)",
+    model_name="Water meter: Electronic (Type 2)",
     data_specs=(
         volume_sensor(0x01, "volume", "float32", scale_factor=1000.0),
         flow_rate_sensor(0x0100, FUNCTION_READ_PARAMETERS, scale_factor=1000.0),
@@ -431,7 +431,7 @@ WATER_TYPE_D_METADATA = DeviceTypeMetadata(
 
 WATER_TYPE_E_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.WATER_TYPE_E,
-    model_name="Водосчётчик двухтарифный",
+    model_name="Water meter: Two-Tariff",
     data_specs=(
         temperature_sensor(0x04, "temperature", "float32", FUNCTION_READ_CHANNELS),
         volume_sensor(0x20, "volume_total", "float32", scale_factor=1000.0),
@@ -456,7 +456,7 @@ WATER_TYPE_E_METADATA = DeviceTypeMetadata(
 
 HEAT_TYPE_A_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.HEAT_TYPE_A,
-    model_name="Теплосчётчик квартирный",
+    model_name="Heat Meter Apartment",
     data_specs=(
         volume_sensor(0x01, "volume_supply", "float32", scale_factor=1000.0),
         volume_sensor(0x02, "volume_return", "float32", scale_factor=1000.0),
@@ -494,7 +494,7 @@ HEAT_TYPE_A_METADATA = DeviceTypeMetadata(
 
 HEAT_TYPE_B_METADATA = DeviceTypeMetadata(
     type_id=DeviceType.HEAT_TYPE_B,
-    model_name="Теплосчётчик квартирный (Legacy)",
+    model_name="Heat Meter Apartment (Legacy)",
     data_specs=(
         temperature_sensor(0x04, "temp_supply", "float32", FUNCTION_READ_CHANNELS),
         temperature_sensor(0x08, "temp_return", "float32", FUNCTION_READ_CHANNELS),
