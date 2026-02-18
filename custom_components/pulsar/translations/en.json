@@ -237,5 +237,29 @@
         "heat_type_b": "Heat Meter Apartment (Legacy)"
       }
     }
+  },
+  "title": "Pulsar meters",
+  "device": {
+    "water_type_a": {
+      "name": "Water meter: Pulse Module"
+    },
+    "water_type_b": {
+      "name": "Water meter: Ultrasonic"
+    },
+    "water_type_c": {
+      "name": "Water meter: Electronic (Type 1)"
+    },
+    "water_type_d": {
+      "name": "Water meter: Electronic (Type 2)"
+    },
+    "water_type_e": {
+      "name": "Water meter: Two-Tariff"
+    },
+    "heat_type_a": {
+      "name": "Heat Meter Apartment"
+    },
+    "heat_type_b": {
+      "name": "Heat Meter Apartment (Legacy)"
+    }
   }
 }
