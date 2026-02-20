@@ -21,10 +21,12 @@ from homeassistant.const import (
     UnitOfVolumeFlowRate,
 )
 
-FUNCTION_READ_CHANNELS = 0x01
-FUNCTION_READ_ARCHIVE = 0x06
-FUNCTION_READ_SYSTEM_TIME = 0x04
-FUNCTION_READ_PARAMETERS = 0x0A
+from .const import (
+    FUNCTION_READ_CHANNELS,
+    FUNCTION_READ_SYSTEM_TIME,
+    FUNCTION_READ_PARAMETERS,
+)
+
 
 class DeviceType(enum.StrEnum):
     """Device type identifiers."""
