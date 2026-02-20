@@ -43,10 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bool:
     """Set up Pulsar with connection validation."""
-    # Инициализируем хранилище данных интеграции
     hass.data.setdefault(DOMAIN, {})
-
-    # Загружаем переводы для раздела "device" один раз
     hass.data[DOMAIN]["device_translations"] = await translation.async_get_translations(
         hass, hass.config.language, "device"
     )
@@ -67,7 +64,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bo
     coordinators: dict[str, PulsarDataUpdateCoordinator] = {}
     devices = device_manager.get_devices(None)
 
-    # Получаем переводы для использования в реестре
     translations = hass.data[DOMAIN]["device_translations"]
     
     # Register devices in device registry
@@ -75,10 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PulsarConfigEntry) -> bo
     for device_id, device in devices.items():
         metadata = device.metadata
         model_key = f"component.{DOMAIN}.device.{metadata.type_id}.name"
-        model = translations.get(model_key, metadata.model_name)  # fallback на английском
-        
-        _LOGGER.debug("Loaded device translations: %s", list(translations.keys()))
-        _LOGGER.debug("Model key: %s, translation: %s", model_key, translations.get(model_key))
+        model = translations.get(model_key, metadata.model_name)
         
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
