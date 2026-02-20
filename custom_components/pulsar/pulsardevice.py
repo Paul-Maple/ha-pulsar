@@ -16,6 +16,9 @@ from .const import (
     LEN_SIZE,
     MAX_REQUEST_ID,
     SERVICE_SIZE,
+    EPSILON,
+    ERROR_MESSAGES,
+    ERROR_RESPONSE_FUNC_CODE,
 )
 from .device_specs import DataSpec, DevicePropertySpec, DeviceTypeMetadata
 from .exceptions import (
@@ -223,15 +226,14 @@ class PulsarDevice:
         expected_response_size = response_size
 
         response = self._connector.send(message, response_size)
-        # Сначала проверяем, не является ли ответ ошибкой (функция 0x00)
-        if len(response) >= 5 and response[4] == 0x00:
-            # Это ответ с ошибкой - возвращаем как есть
+        
+        if len(response) >= 5 and response[4] == ERROR_RESPONSE_FUNC_CODE:
             return response
     
-        # Если не ошибка, проверяем как обычно
         self.check_response(response, expected_response_size, addr, request_id)
 
         return response
+
 
     def send_payload(
         self,
@@ -261,21 +263,9 @@ class PulsarDevice:
         request = self.prepare_request(payload, function, addr, request_id)
         response = self.send_request(request, expected_payload_size + SERVICE_SIZE)
         
-        # Проверяем, не является ли ответ ошибкой (функция 0x00)
-        if len(response) >= 5 and response[4] == 0x00:
-            # Это ответ с ошибкой
+        if len(response) >= 5 and response[4] == ERROR_RESPONSE_FUNC_CODE:
             error_code = response[6] if len(response) > 6 else 0
-            error_messages = {
-                0x01: "Function code not supported",
-                0x02: "Invalid channel mask",
-                0x03: "Invalid length",
-                0x04: "Parameter missing",
-                0x05: "Write locked / Auth required",
-                0x06: "Value out of range",
-                0x07: "Archive type not supported",
-                0x08: "Max archive entries exceeded",
-            }
-            error_msg = error_messages.get(error_code, f"Unknown error code: 0x{error_code:02X}")
+            error_msg = ERROR_MESSAGES.get(error_code, f"Unknown error code: 0x{error_code:02X}")
             raise PulsarProtocolError(f"Device returned error: {error_msg}")
         
         start_ind = ADDR_SIZE + FUNC_SIZE + LEN_SIZE
@@ -530,12 +520,7 @@ class PulsarDevice:
         if data_type == "float32":
             value = self.read_float_from_hex(response_payload, 4, 0, False)
             
-            # Константа для сравнения с плавающей точкой
-            EPSILON = 1e-3
-            
-            # Проверка специальных значений float, обозначающих недоступность данных
             if value is not None:
-                # Сравнение с учётом погрешности
                 if abs(abs(value) - 999.0) < EPSILON:
                     
                     _LOGGER.warning(
