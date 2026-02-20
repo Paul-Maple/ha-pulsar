@@ -71,7 +71,7 @@ def get_device_type_options() -> list[selector.SelectOptionDict]:
         options.append(
             selector.SelectOptionDict(
                 value=device_type.value,
-                label=device_type.value,  # Используем значение как ключ для перевода
+                label=device_type.value,
             )
         )
     return options

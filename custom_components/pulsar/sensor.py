@@ -104,7 +104,6 @@ class PulsarSensorEntity(CoordinatorEntity[PulsarDataUpdateCoordinator], SensorE
 
         metadata = device.metadata
 
-        # Получаем переводы, загруженные при настройке интеграции
         translations = self.hass.data.get(DOMAIN, {}).get("device_translations", {})
         model_key = f"component.{DOMAIN}.device.{metadata.type_id}.name"
         model = translations.get(model_key, metadata.model_name)
